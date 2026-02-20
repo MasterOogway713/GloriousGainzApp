@@ -15,6 +15,9 @@
   <!-- Babel (Compiles JSX in the browser) -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
+  <!-- Chart.js for Advanced Analytics -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
   <style>
     body { background-color: #09090b; color: #f8fafc; font-family: sans-serif; -webkit-tap-highlight-color: transparent; }
     .pb-safe { padding-bottom: env(safe-area-inset-bottom, 16px); }
@@ -31,6 +34,10 @@
       animation: scroll-whisper 30s linear infinite;
       will-change: transform;
     }
+    /* Custom Slider Styling */
+    input[type=range] { -webkit-appearance: none; background: transparent; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 20px; width: 20px; border-radius: 50%; background: #f97316; cursor: pointer; margin-top: -8px; }
+    input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: #27272a; border-radius: 2px; }
   </style>
 </head>
 <body>
@@ -39,18 +46,14 @@
   <script type="text/babel" data-type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
     import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, collection, addDoc, onSnapshot, query, doc, setDoc, updateDoc, deleteField } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    import { getFirestore, collection, addDoc, onSnapshot, query, doc, setDoc, updateDoc, deleteField, arrayUnion } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     const { useState, useEffect, useMemo } = React;
 
     // ==========================================
-    // 🛠️ GITHUB PAGES SETUP: PASTE YOUR KEYS HERE
+    // 🛠️ CONFIGURATION
     // ==========================================
-    
-    // 1. Paste your Gemini API key here for AI features:
     const myGeminiApiKey = ""; 
-    
-    // 2. Paste your Firebase Config here:
     const myFirebaseConfig = {
       apiKey: "AIzaSyBXshCysVDRwvAOCvvnaqYNbAYjtdl3Wz4",
       authDomain: "gloriousgainzapp.firebaseapp.com",
@@ -60,118 +63,83 @@
       appId: "1:620249838291:web:784bdc3e4ff188ebb21a26"
     };
 
-    // (This line keeps it working in the preview environment OR your own GitHub pages)
     const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : myFirebaseConfig;
     const apiKey = typeof __gemini_api_key !== 'undefined' ? __gemini_api_key : myGeminiApiKey;
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'turkey-shred-app';
     
-    // Initialize Firebase
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getFirestore(app);
 
-    // --- INLINE ICONS ---
-    const IconTrophy = ({className, size=24}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7c0 3.31 2.69 6 6 6s6-2.69 6-6V2Z"/></svg>;
-    const IconActivity = ({className, size=24}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>;
-    const IconFlame = ({className, size=24}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>;
-    const IconDumbbell = ({className, size=24}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m14.4 14.4 5.6 5.6"/><path d="m20 20-1.4 1.4"/><path d="m4 4 1.4-1.4"/><path d="m4 4 5.6 5.6"/><path d="M10 10 14 6"/><path d="m14 14-4 4"/><path d="m18 18-4 4"/><path d="m22 14-4-4"/><path d="m10 2-4 4"/><path d="m6 6-4 4"/></svg>;
-    const IconUtensils = ({className, size=24}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg>;
-    const IconDroplets = ({className, size=24}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 16.3c2.2 0 4-1.83 4-4.05 0-1.16-.57-2.26-1.71-3.19S7.29 6.75 7 5.3c-.29 1.45-1.14 2.84-2.29 3.76S3 11.1 3 12.25c0 2.22 1.8 4.05 4 4.05z"/><path d="M12.56 6.6A10.97 10.97 0 0 0 14 3.02c.5 2.5 2 4.9 4 6.5s3 3.5 3 5.5a6.98 6.98 0 0 1-11.91 4.97"/></svg>;
-    const IconBan = ({className, size=24}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/></svg>;
-    const IconCalendar = ({className, size=24}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>;
-    const IconArrowRight = ({className, size=24}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>;
-    const IconMessageSquare = ({className, size=24}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>;
-    const IconPlus = ({className, size=24}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>;
-    const IconX = ({className, size=24}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>;
-    const IconSearch = ({className, size=24}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>;
-    const IconUser = ({className, size=24}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>;
-    const IconTimer = ({className, size=24}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
-    const IconSparkles = ({className, size=24}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M3 5h4"/><path d="M19 19v4"/><path d="M17 21h4"/></svg>;
-    const IconLoader = ({className, size=24}) => <svg className={`animate-spin ${className}`} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>;
-
     const TEMPLATES = {
       "Chest/Tris": ["Bench Press", "Incline Dumbbell Press", "Pec Deck", "Tricep Extension", "Skullcrushers", "Dips"],
-      "Back/Biceps": ["Deadlift", "Pull-ups", "Barbell Row", "Lat Pulldown", "Seated Cable Row", "Dumbbell Curl", "Hammer Curl"],
+      "Back/Biceps": ["Pull-ups", "Barbell Row", "Lat Pulldown", "Seated Cable Row", "Dumbbell Curl", "Hammer Curl"],
       "Shoulders/Abs": ["Overhead Press", "Lateral Raises", "Front Raise", "Face Pulls", "Crunch", "Plank", "Cable Woodchop"],
-      "Legs": ["Squat", "Leg Press", "Leg Extension", "Hamstring Curl", "Calf Raise", "Lunges"],
+      "Legs": ["Leg Press", "Leg Extension", "Hamstring Curl", "Calf Raise", "Lunges"],
       "Other": ["Hip Thrust", "Farmers Walk", "Shrugs", "Clean and Jerk", "Snatch"]
     };
     const REP_TARGETS = [4, 8, 10, 15, 20, 30];
-
     const DB_URL = "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/dist/exercises.json";
     const IMG_BASE_URL = "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/";
 
     // --- GEMINI API INTEGRATION ---
     const callGemini = async (prompt, systemInstruction) => {
-      if (!apiKey || apiKey === "YOUR_API_KEY") {
-        alert("Please add your Gemini API key in the code to use AI features.");
-        return null;
-      }
-      
+      if (!apiKey || apiKey === "YOUR_API_KEY") return null;
       const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-      
-      let retryCount = 0;
-      while (retryCount < 5) {
-        try {
-          const res = await fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: prompt }] }],
-              systemInstruction: { parts: [{ text: systemInstruction }] }
-            })
-          });
-          const data = await res.json();
-          return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-        } catch (error) {
-          retryCount++;
-          await new Promise(r => setTimeout(r, Math.pow(2, retryCount) * 1000));
-        }
-      }
-      return null;
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            systemInstruction: { parts: [{ text: systemInstruction }] }
+          })
+        });
+        const data = await res.json();
+        return data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      } catch (error) { return null; }
     };
 
-    // --- SCREENS & COMPONENTS ---
-    function WelcomeScreen({ onSelect }) {
-      // Repeat the string enough times so it loops smoothly off screen
-      const whisperText = "The glorious house of gains... ".repeat(30);
+    // --- UI COMPONENTS ---
+    function IconTrophy({className, size=24}) { return <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7c0 3.31 2.69 6 6 6s6-2.69 6-6V2Z"/></svg>; }
+    function IconActivity({className, size=24}) { return <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>; }
+    function IconFlame({className, size=24}) { return <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>; }
+    function IconDumbbell({className, size=24}) { return <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m14.4 14.4 5.6 5.6"/><path d="m20 20-1.4 1.4"/><path d="m4 4 1.4-1.4"/><path d="m4 4 5.6 5.6"/><path d="M10 10 14 6"/><path d="m14 14-4 4"/><path d="m18 18-4 4"/><path d="m22 14-4-4"/><path d="m10 2-4 4"/><path d="m6 6-4 4"/></svg>; }
+    function IconUtensils({className, size=24}) { return <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg>; }
+    function IconCalendar({className, size=24}) { return <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>; }
+    function IconSearch({className, size=24}) { return <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>; }
+    function IconSparkles({className, size=24}) { return <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M3 5h4"/></svg>; }
+    function IconMessageCircle({className, size=24}) { return <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>; }
+    function IconPlus({className, size=24}) { return <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>; }
+    function IconUser({className, size=24}) { return <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>; }
+    function IconMessageSquare({className, size=24}) { return <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>; }
+    function IconArrowRight({className, size=24}) { return <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>; }
+    function IconX({className, size=24}) { return <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>; }
+    function IconTimer({className, size=24}) { return <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>; }
+    function IconLoader({className, size=24}) { return <svg className={`animate-spin ${className}`} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"/><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"/><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"/></svg>; }
 
+    // --- APP CONTENT ---
+    function WelcomeScreen({ onSelect }) {
+      const whisperText = "The glorious house of gains... ".repeat(30);
       return (
         <div className="relative min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-6 text-center overflow-hidden">
-          
-          {/* Background Whispers */}
           <div className="absolute inset-0 z-0 pointer-events-none flex flex-col justify-around overflow-hidden opacity-[0.03] select-none">
-            <div className="whisper-scroll text-5xl font-black italic text-white">{whisperText}</div>
-            <div className="whisper-scroll text-7xl font-black italic text-white" style={{ animationDirection: 'reverse', animationDuration: '40s' }}>{whisperText}</div>
-            <div className="whisper-scroll text-4xl font-black italic text-white" style={{ animationDuration: '25s' }}>{whisperText}</div>
-            <div className="whisper-scroll text-8xl font-black italic text-white" style={{ animationDirection: 'reverse', animationDuration: '50s' }}>{whisperText}</div>
-            <div className="whisper-scroll text-6xl font-black italic text-white" style={{ animationDuration: '35s' }}>{whisperText}</div>
+            {[30, 40, 25, 50, 35].map((speed, i) => (
+              <div key={i} className="whisper-scroll text-6xl font-black italic text-white" style={{ animationDuration: `${speed}s`, animationDirection: i % 2 === 0 ? 'normal' : 'reverse' }}>{whisperText}</div>
+            ))}
           </div>
-
-          {/* Foreground Content */}
           <div className="relative z-10 flex flex-col items-center w-full">
             <div className="bg-orange-500/10 p-4 rounded-full mb-6 border border-orange-500/20 backdrop-blur-md">
               <IconTrophy className="text-orange-500 w-12 h-12" />
             </div>
-            <h1 className="text-4xl font-black italic tracking-tighter mb-2 uppercase text-white">
-              Turkey Shred <span className="text-orange-500">'26</span>
-            </h1>
+            <h1 className="text-4xl font-black italic tracking-tighter mb-2 uppercase text-white">Turkey Shred <span className="text-orange-500">'26</span></h1>
             <p className="text-zinc-400 mb-12">Who is grinding today?</p>
-            
             <div className="flex gap-4 w-full max-w-sm">
-              <button 
-                onClick={() => onSelect('Jordan')}
-                className="flex-1 bg-zinc-900/80 backdrop-blur-sm border border-zinc-800 hover:border-orange-500 py-8 rounded-2xl font-bold text-xl text-white transition-all active:scale-95 flex flex-col items-center gap-2 shadow-2xl"
-              >
-                <div className="w-12 h-12 bg-blue-500/20 rounded-full flex items-center justify-center text-blue-500 text-2xl font-black border border-blue-500/30">J</div>
-                Jordan
+              <button onClick={() => onSelect('Jordan')} className="flex-1 bg-zinc-900/80 backdrop-blur-sm border border-zinc-800 hover:border-orange-500 py-8 rounded-2xl font-bold text-xl text-white transition-all active:scale-95 flex flex-col items-center gap-2 shadow-2xl">
+                <div className="w-12 h-12 bg-blue-500/20 rounded-full flex items-center justify-center text-blue-500 text-2xl font-black border border-blue-500/30">J</div> Jordan
               </button>
-              <button 
-                onClick={() => onSelect('Aaron')}
-                className="flex-1 bg-zinc-900/80 backdrop-blur-sm border border-zinc-800 hover:border-orange-500 py-8 rounded-2xl font-bold text-xl text-white transition-all active:scale-95 flex flex-col items-center gap-2 shadow-2xl"
-              >
-                <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center text-emerald-500 text-2xl font-black border border-emerald-500/30">A</div>
-                Aaron
+              <button onClick={() => onSelect('Aaron')} className="flex-1 bg-zinc-900/80 backdrop-blur-sm border border-zinc-800 hover:border-orange-500 py-8 rounded-2xl font-bold text-xl text-white transition-all active:scale-95 flex flex-col items-center gap-2 shadow-2xl">
+                <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center text-emerald-500 text-2xl font-black border border-emerald-500/30">A</div> Aaron
               </button>
             </div>
           </div>
@@ -180,242 +148,107 @@
     }
 
     function Header({ localUser }) {
-      const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0 });
-
+      const [daysLeft, setDaysLeft] = useState(0);
       useEffect(() => {
-        const targetDate = new Date('2026-04-25T00:00:00').getTime();
-        const calcTime = () => {
-          const now = new Date().getTime();
-          const distance = targetDate - now;
-          if (distance < 0) return { days: 0, hours: 0 };
-          const days = Math.floor(distance / (1000 * 60 * 60 * 24));
-          const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-          setTimeLeft({ days, hours });
+        const target = new Date('2026-04-25T00:00:00').getTime();
+        const update = () => {
+          const dist = target - Date.now();
+          setDaysLeft(Math.floor(dist / (1000 * 60 * 60 * 24)));
         };
-        calcTime();
-        const int = setInterval(calcTime, 3600000); 
-        return () => clearInterval(int);
+        update();
       }, []);
-
       return (
         <div className="sticky top-0 z-50 bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-800/50 px-4 py-3 flex justify-between items-center">
           <div>
-            <h1 className="text-xl font-black italic tracking-tighter uppercase">
-              Turkey<span className="text-orange-500">Shred</span>
-            </h1>
+            <h1 className="text-xl font-black italic tracking-tighter uppercase">Turkey<span className="text-orange-500">Shred</span></h1>
             <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-1">
-              <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div>
-              Live as {localUser}
+              <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div> Live as {localUser}
             </div>
           </div>
           <div className="text-right flex items-center gap-3 bg-zinc-900 px-3 py-1.5 rounded-xl border border-zinc-800">
             <IconCalendar className="w-4 h-4 text-orange-500" />
-            <div>
-              <div className="text-sm font-black leading-none">{timeLeft.days} <span className="text-[10px] text-zinc-500 font-bold">DAYS</span></div>
-            </div>
+            <div className="text-sm font-black leading-none">{daysLeft} <span className="text-[10px] text-zinc-500 font-bold">DAYS</span></div>
           </div>
         </div>
       );
     }
 
     function Feed({ workouts, habits, localUser }) {
+      const [commentText, setCommentText] = useState({});
+      const [showComments, setShowComments] = useState({});
       const allEvents = useMemo(() => {
-        const evts = [
-          ...workouts.map(w => ({ ...w, type: 'workout' })),
-          ...habits.map(h => ({ ...h, type: 'habit' }))
-        ];
-        
-        // Sort all descending
-        evts.sort((a, b) => b.timestamp - a.timestamp);
-
+        const evts = [...workouts.map(w => ({ ...w, type: 'workout' })), ...habits.map(h => ({ ...h, type: 'habit' }))].sort((a, b) => b.timestamp - a.timestamp);
         const groups = {};
         const result = [];
-
         evts.forEach(evt => {
           if (evt.type === 'workout') {
-            // Group by User + Date + Exercise
             const key = `workout-${evt.user}-${evt.date}-${evt.exercise}`;
             if (!groups[key]) {
-              groups[key] = {
-                id: key,
-                primaryDocId: evt.id, // Save the latest doc ID for reactions
-                type: 'workoutGroup',
-                user: evt.user,
-                date: evt.date,
-                exercise: evt.exercise,
-                timestamp: evt.timestamp,
-                sets: [],
-                reactions: {}
-              };
+              groups[key] = { id: key, primaryDocId: evt.id, type: 'workoutGroup', user: evt.user, date: evt.date, exercise: evt.exercise, timestamp: evt.timestamp, sets: [], reactions: {}, comments: evt.comments || [] };
               result.push(groups[key]);
             }
             groups[key].sets.push(evt);
-            
-            // Merge reactions safely
-            if (evt.reactions) {
-               Object.keys(evt.reactions).forEach(usr => {
-                 if (!groups[key].reactions[usr]) {
-                   groups[key].reactions[usr] = evt.reactions[usr];
-                 }
-               });
-            }
-          } else {
-            result.push(evt);
-          }
+            if (evt.reactions) Object.keys(evt.reactions).forEach(usr => { if (!groups[key].reactions[usr]) groups[key].reactions[usr] = evt.reactions[usr]; });
+          } else { result.push(evt); }
         });
-
         return result;
       }, [workouts, habits]);
 
-      const getTimeAgo = (ts) => {
-        const diff = Date.now() - ts;
-        const mins = Math.floor(diff / 60000);
-        if (mins < 60) return `${mins}m ago`;
-        const hrs = Math.floor(mins / 60);
-        if (hrs < 24) return `${hrs}h ago`;
-        return `${Math.floor(hrs / 24)}d ago`;
-      };
-
       const handleReact = async (evt, emoji) => {
-        const colName = evt.type === 'workoutGroup' ? 'workouts' : 'habits';
+        const col = evt.type === 'workoutGroup' ? 'workouts' : 'habits';
         const docId = evt.type === 'workoutGroup' ? evt.primaryDocId : evt.id;
-        const ref = doc(db, 'artifacts', appId, 'public', 'data', colName, docId);
-        try {
-          await updateDoc(ref, {
-            [`reactions.${localUser}`]: emoji ? emoji : deleteField()
-          });
-        } catch (err) { console.error(err); }
+        try { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', col, docId), { [`reactions.${localUser}`]: emoji || deleteField() }); } catch (err) {}
       };
 
-      const renderReactions = (evt) => {
-        const options = ['🔥', '💪', '🤡', '🐐'];
-        const currentReact = evt.reactions?.[localUser];
-        
-        return (
-          <div className="flex gap-2 mt-3 pt-3 border-t border-zinc-800/50 overflow-x-auto hide-scrollbar">
-            {options.map(emoji => {
-               const hasReacted = currentReact === emoji;
-               const count = Object.values(evt.reactions || {}).filter(e => e === emoji).length;
-               
-               if (count === 0 && !hasReacted) return (
-                 <button 
-                   key={emoji} 
-                   onClick={() => handleReact(evt, emoji)}
-                   className="px-2 py-1 rounded-full text-xs bg-zinc-800/50 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 transition-colors flex items-center opacity-50 hover:opacity-100"
-                 >
-                   {emoji}
-                 </button>
-               );
-
-               return (
-                 <button 
-                   key={emoji} 
-                   onClick={() => handleReact(evt, hasReacted ? null : emoji)}
-                   className={`px-2 py-1 rounded-full text-xs flex items-center gap-1.5 border transition-colors ${hasReacted ? 'bg-orange-500/20 border-orange-500 text-white' : 'bg-zinc-800 border-zinc-700 text-zinc-300'}`}
-                 >
-                   {emoji} {count > 0 && <span className="font-bold">{count}</span>}
-                 </button>
-               )
-            })}
-          </div>
-        );
+      const handleAddComment = async (evt) => {
+        const txt = commentText[evt.id]; if (!txt?.trim()) return;
+        const col = evt.type === 'workoutGroup' ? 'workouts' : 'habits';
+        const docId = evt.type === 'workoutGroup' ? evt.primaryDocId : evt.id;
+        try {
+          await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', col, docId), { comments: arrayUnion({ user: localUser, text: txt.trim(), timestamp: Date.now() }) });
+          setCommentText({ ...commentText, [evt.id]: '' });
+        } catch(e) {}
       };
 
       return (
         <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-sm font-bold text-zinc-500 uppercase tracking-widest">Live Feed</h2>
-          </div>
-          
-          {allEvents.length === 0 ? (
-            <div className="text-center p-8 bg-zinc-900/50 rounded-2xl border border-zinc-800 text-zinc-500">
-              No activity yet. Set the tone!
-            </div>
-          ) : (
+          <h2 className="text-sm font-bold text-zinc-500 uppercase tracking-widest">Live Feed</h2>
+          {allEvents.length === 0 ? <div className="text-center p-8 bg-zinc-900/50 rounded-2xl border border-zinc-800 text-zinc-500">No activity yet.</div> :
             allEvents.map(evt => {
               const isMe = evt.user === localUser;
-              const userColor = evt.user === 'Jordan' ? 'text-blue-500 bg-blue-500/10 border-blue-500/20' : 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20';
-              
-              if (evt.type === 'workoutGroup') {
-                return (
-                  <div key={evt.id} className={`p-4 rounded-2xl border ${isMe ? 'border-zinc-800 bg-zinc-900/50' : 'border-orange-500/30 bg-orange-500/5'} transition-all`}>
-                    <div className="flex justify-between items-start mb-2">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border ${userColor}`}>
-                          {evt.user.charAt(0)}
-                        </div>
-                        <span className="font-bold text-sm">{evt.user}</span>
-                        <span className="text-xs text-zinc-500">logged {evt.sets.length} set{evt.sets.length > 1 ? 's' : ''}</span>
-                      </div>
-                      <span className="text-[10px] font-bold text-zinc-500">{getTimeAgo(evt.timestamp)}</span>
-                    </div>
-                    
-                    <div className="pl-8">
-                      <div className="flex items-end gap-2 mb-2">
-                        <span className="font-black text-lg text-white">{evt.exercise}</span>
-                      </div>
-                      
-                      <div className="space-y-2">
-                        {/* We reverse the sets array so Set 1 appears at the top */}
-                        {[...evt.sets].reverse().map((set, idx) => (
-                          <div key={set.id} className="flex flex-col gap-1">
-                            <div className="inline-flex items-center w-max gap-2 bg-zinc-950 px-2 py-1 rounded border border-zinc-800 font-mono text-sm text-orange-400 font-bold">
-                              <span className="text-zinc-600 text-xs font-sans mr-1">Set {idx + 1}</span>
-                              {set.weight}kg <IconX className="w-3 h-3 text-zinc-600 inline" /> {set.reps} reps
-                            </div>
-                            {set.note && (
-                              <div className="mt-1 text-sm text-zinc-400 border-l-2 border-zinc-700 pl-3 italic flex items-start gap-2">
-                                <IconMessageSquare className="w-3 h-3 mt-1 text-zinc-600 shrink-0" />
-                                <span>"{set.note}"</span>
-                              </div>
-                            )}
-                          </div>
+              const color = evt.user === 'Jordan' ? 'text-blue-500 bg-blue-500/10 border-blue-500/20' : 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20';
+              return (
+                <div key={evt.id} className={`p-4 rounded-2xl border ${isMe ? 'border-zinc-800 bg-zinc-900/50' : 'border-orange-500/30 bg-orange-500/5'}`}>
+                  <div className="flex justify-between items-start mb-2 text-sm">
+                    <div className="flex items-center gap-2"><div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border ${color}`}>{evt.user.charAt(0)}</div><span className="font-bold">{evt.user}</span> <span className="text-zinc-500">{evt.type === 'workoutGroup' ? `logged ${evt.sets.length} sets` : 'checked habits'}</span></div>
+                    <span className="text-[10px] font-bold text-zinc-500">{new Date(evt.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                  </div>
+                  <div className="pl-8">
+                    {evt.type === 'workoutGroup' ? <><span className="font-black text-lg block mb-2">{evt.exercise}</span>
+                      <div className="space-y-1.5">
+                        {[...evt.sets].reverse().map((s, i) => (
+                          <div key={i}><div className="inline-flex items-center gap-2 bg-zinc-950 px-2 py-1 rounded border border-zinc-800 text-sm text-orange-400 font-bold font-mono">Set {i+1}: {s.weight}kg x {s.reps}</div>
+                          {s.note && <div className="text-xs text-zinc-400 italic mt-1 pl-2 border-l border-zinc-700">"{s.note}"</div>}</div>
                         ))}
-                      </div>
-
-                      {renderReactions(evt)}
+                      </div></> : 
+                      <div className="flex flex-wrap gap-1">{(['calories','protein','water','noAlcohol']).map(h => evt[h] && <span key={h} className="text-[10px] bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded-full font-bold">✓ {h}</span>)}</div>}
+                    <div className="flex gap-2 mt-3 pt-3 border-t border-zinc-800/50">
+                      {['🔥', '💪', '🐐'].map(emoji => (
+                        <button key={emoji} onClick={() => handleReact(evt, evt.reactions?.[localUser] === emoji ? null : emoji)} className={`px-2 py-1 rounded-full text-xs border ${evt.reactions?.[localUser] === emoji ? 'bg-orange-500/20 border-orange-500' : 'bg-zinc-800 border-zinc-700 opacity-60'}`}>{emoji} {Object.values(evt.reactions || {}).filter(e => e === emoji).length || ''}</button>
+                      ))}
+                    </div>
+                    <div className="mt-3">
+                      <button onClick={() => setShowComments({...showComments, [evt.id]: !showComments[evt.id]})} className="text-xs text-zinc-500 flex items-center gap-1 font-bold"><IconMessageCircle size={14} /> {evt.comments?.length || 0} Comments</button>
+                      {showComments[evt.id] && <div className="mt-3 space-y-2 pl-3 border-l-2 border-zinc-800">
+                        {evt.comments?.map((c, i) => <div key={i} className="text-xs"><span className={c.user === 'Jordan' ? 'text-blue-500 font-bold' : 'text-emerald-500 font-bold'}>{c.user}: </span><span className="text-zinc-300">{c.text}</span></div>)}
+                        <div className="flex gap-2"><input value={commentText[evt.id] || ''} onChange={e => setCommentText({...commentText, [evt.id]: e.target.value})} placeholder="Savage comment..." className="flex-1 bg-black border border-zinc-800 rounded-lg px-2 py-1 text-xs outline-none focus:border-orange-500" /><button onClick={() => handleAddComment(evt)} className="bg-zinc-800 px-2 rounded text-xs">Post</button></div>
+                      </div>}
                     </div>
                   </div>
-                );
-              } else {
-                const habitsHit = [
-                  evt.calories && 'Calories',
-                  evt.protein && 'Protein',
-                  evt.water && 'Water',
-                  evt.noAlcohol && 'No Booze'
-                ].filter(Boolean);
-
-                if (habitsHit.length === 0) return null;
-
-                return (
-                  <div key={evt.id} className="p-4 rounded-2xl border border-zinc-800 bg-zinc-900/30">
-                     <div className="flex items-start gap-3">
-                       <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 border ${userColor}`}>
-                         <IconFlame className="w-4 h-4" />
-                       </div>
-                       <div className="flex-1">
-                         <div className="flex justify-between items-start">
-                           <div>
-                             <span className="font-bold text-sm">{evt.user}</span>
-                             <span className="text-xs text-zinc-500 ml-1">checked in daily habits</span>
-                           </div>
-                           <span className="text-[10px] font-bold text-zinc-500">{getTimeAgo(evt.timestamp)}</span>
-                         </div>
-                         <div className="mt-2 flex flex-wrap gap-1">
-                           {habitsHit.map(h => (
-                             <span key={h} className="text-[10px] bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded-full font-bold">✓ {h}</span>
-                           ))}
-                         </div>
-                       </div>
-                     </div>
-                     <div className="pl-11">
-                       {renderReactions(evt)}
-                     </div>
-                  </div>
-                )
-              }
+                </div>
+              );
             })
-          )}
+          }
         </div>
       );
     }
@@ -424,534 +257,174 @@
       const [activeTemplate, setActiveTemplate] = useState("Chest/Tris");
       const [exercise, setExercise] = useState(TEMPLATES["Chest/Tris"][0]);
       const [weight, setWeight] = useState('');
-      const [reps, setReps] = useState('');
+      const [reps, setReps] = useState('10');
       const [note, setNote] = useState('');
-      
-      const [isSubmitting, setIsSubmitting] = useState(false);
       const [showSearchModal, setShowSearchModal] = useState(false);
       const [restTime, setRestTime] = useState(0);
-
-      // Gemini State
-      const [isGeneratingNote, setIsGeneratingNote] = useState(false);
-      const [isGeneratingRoutine, setIsGeneratingRoutine] = useState(false);
-      const [aiPrompt, setAiPrompt] = useState('');
-      const [customAiTemplate, setCustomAiTemplate] = useState(null);
+      const [showPastSets, setShowPastSets] = useState(false);
 
       const rival = localUser === 'Jordan' ? 'Aaron' : 'Jordan';
-      const todayStr = new Date().toISOString().split('T')[0];
-      const todaysWorkouts = workouts.filter(w => w.user === localUser && w.date === todayStr).sort((a,b) => b.timestamp - a.timestamp);
+      const today = new Date().toISOString().split('T')[0];
 
-      // Timer Effect
-      useEffect(() => {
-        if (restTime <= 0) return;
-        const t = setInterval(() => setRestTime(r => r - 1), 1000);
-        return () => clearInterval(t);
-      }, [restTime]);
+      useEffect(() => { if (restTime > 0) { const t = setInterval(() => setRestTime(r => r - 1), 1000); return () => clearInterval(t); } }, [restTime]);
 
-      // Last Time Indicator
-      const lastSession = useMemo(() => {
-        const pastSets = workouts.filter(w => w.user === localUser && w.exercise === exercise && w.date !== todayStr).sort((a,b) => b.timestamp - a.timestamp);
-        return pastSets.length > 0 ? pastSets[0] : null;
-      }, [exercise, workouts, localUser, todayStr]);
+      const lastSets = useMemo(() => {
+        const past = workouts.filter(w => w.user === localUser && w.exercise === exercise && w.date !== today).sort((a,b) => b.timestamp - a.timestamp);
+        if (!past.length) return [];
+        const lastDate = past[0].date;
+        return past.filter(p => p.date === lastDate).reverse();
+      }, [workouts, localUser, exercise, today]);
 
-      const handleTemplateSelect = (t) => {
-        setActiveTemplate(t);
-        if (t === 'AI Custom ✨') {
-          if (customAiTemplate && customAiTemplate.length > 0) {
-            setExercise(customAiTemplate[0]);
-          } else {
-            setExercise('');
-          }
-        } else {
-          setExercise(TEMPLATES[t][0]);
-        }
-      };
+      const myPB = useMemo(() => {
+        const sets = workouts.filter(w => w.user === localUser && w.exercise === exercise);
+        return sets.length ? sets.reduce((max, curr) => curr.weight > max.weight ? curr : max, sets[0]) : null;
+      }, [workouts, localUser, exercise]);
 
-      const handleGenerateNote = async () => {
-        if (!exercise || !weight || !reps) return;
-        setIsGeneratingNote(true);
-        const instruction = "You are a hyper-competitive, funny, savage gym bro. No emojis.";
-        const prompt = `I am ${localUser}. My friend and rival is ${rival}. We are training for a holiday to Turkey. I just completed a set of ${exercise} with ${weight}kg for ${reps} reps. Write a 1-sentence funny, savage trash talk quote aimed at ${rival} to use as my set note. Keep it under 15 words.`;
-        
-        const result = await callGemini(prompt, instruction);
-        if (result) {
-          setNote(result.replace(/^"|"$/g, '').trim()); // Clean quotes
-        }
-        setIsGeneratingNote(false);
-      };
-
-      const handleGenerateRoutine = async () => {
-        if (!aiPrompt) return;
-        setIsGeneratingRoutine(true);
-        const instruction = "You are an expert fitness coach AI.";
-        const prompt = `Create a custom gym routine for this scenario: "${aiPrompt}". Return EXACTLY a JSON array of strings, where each string is a standard exercise name. Maximum 6 exercises. Example output: ["Barbell Squat", "Leg Press", "Calf Raise"]. DO NOT output markdown blocks or any other text. Only the raw JSON array.`;
-        
-        const result = await callGemini(prompt, instruction);
-        if (result) {
-          try {
-            let cleaned = result.replace(/```json/g, '').replace(/```/g, '').trim();
-            const exercises = JSON.parse(cleaned);
-            if (Array.isArray(exercises) && exercises.length > 0) {
-              setCustomAiTemplate(exercises);
-              setExercise(exercises[0]);
-            }
-          } catch (e) {
-            console.error("Failed to parse Gemini routine JSON", e);
-          }
-        }
-        setIsGeneratingRoutine(false);
-      };
+      const rivalPB = useMemo(() => {
+        const sets = workouts.filter(w => w.user === rival && w.exercise === exercise);
+        return sets.length ? sets.reduce((max, curr) => curr.weight > max.weight ? curr : max, sets[0]) : null;
+      }, [workouts, rival, exercise]);
 
       const handleLog = async (e) => {
         e.preventDefault();
         if (!weight || !reps || !exercise) return;
-        setIsSubmitting(true);
-        
         try {
-          await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'workouts'), {
-            user: localUser,
-            exercise,
-            weight: parseFloat(weight),
-            reps: parseInt(reps, 10),
-            note: note.trim(),
-            date: todayStr,
-            timestamp: Date.now()
-          });
-          setWeight('');
-          setNote('');
-          setRestTime(90);
-        } catch (err) {
-          console.error(err);
-        }
-        setIsSubmitting(false);
+          await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'workouts'), { user: localUser, exercise, weight: parseFloat(weight), reps: parseInt(reps, 10), note: note.trim(), date: today, timestamp: Date.now() });
+          setWeight(''); setNote(''); setRestTime(90);
+        } catch (err) {}
       };
 
-      const handleSelectFromDB = (exName) => {
-        setExercise(exName);
-        setShowSearchModal(false);
-      };
-
-      // DYNAMIC SUGGESTIONS
       const suggestedExercises = useMemo(() => {
-        let baseList = activeTemplate === 'AI Custom ✨' && customAiTemplate ? customAiTemplate : (TEMPLATES[activeTemplate] || []);
-        
-        const getLastLoggedTime = (exName) => {
-            const matches = workouts.filter(w => w.user === localUser && w.exercise === exName);
-            if (matches.length === 0) return 0;
-            return Math.max(...matches.map(w => w.timestamp));
-        };
-
-        return [...baseList].sort((a, b) => getLastLoggedTime(b) - getLastLoggedTime(a));
-      }, [activeTemplate, customAiTemplate, workouts, localUser]);
+        const baseList = TEMPLATES[activeTemplate] || [];
+        const getLast = (ex) => { const m = workouts.filter(w => w.user === localUser && w.exercise === ex); return m.length ? Math.max(...m.map(w => w.timestamp)) : 0; };
+        return [...baseList].sort((a, b) => getLast(b) - getLast(a));
+      }, [activeTemplate, workouts, localUser]);
 
       return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-          
-          {/* Floating Rest Timer */}
-          {restTime > 0 && (
-            <div className="fixed bottom-[80px] left-1/2 -translate-x-1/2 bg-zinc-950 border border-orange-500/50 text-orange-500 px-5 py-3 rounded-full font-mono text-xl font-black shadow-[0_0_30px_rgba(249,115,22,0.2)] z-40 flex items-center gap-4 animate-in slide-in-from-bottom-10 fade-in">
-               <IconTimer className="w-5 h-5 animate-pulse" />
-               <span>{Math.floor(restTime/60)}:{(restTime%60).toString().padStart(2, '0')}</span>
-               <button onClick={() => setRestTime(0)} className="text-zinc-500 hover:text-white bg-zinc-900 rounded-full p-1"><IconX size={16}/></button>
-            </div>
-          )}
+          {restTime > 0 && <div className="fixed bottom-[80px] left-1/2 -translate-x-1/2 bg-zinc-950 border border-orange-500 text-orange-500 px-5 py-3 rounded-full font-mono text-xl font-black shadow-xl z-50 flex items-center gap-4 animate-bounce">
+            <IconTimer size={20} /> {Math.floor(restTime/60)}:{(restTime%60).toString().padStart(2, '0')}
+            <button onClick={() => setRestTime(0)} className="text-zinc-500"><IconX size={16}/></button>
+          </div>}
 
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-black italic uppercase text-white">Log Set</h2>
-          </div>
-
-          <div className="bg-gradient-to-br from-zinc-900 to-zinc-950 p-5 rounded-3xl border border-zinc-800 shadow-xl mb-8 relative overflow-hidden">
-            <div className="absolute -top-10 -right-10 text-orange-500/5 pointer-events-none">
-              <IconDumbbell size={120} />
-            </div>
-            
+          <div className="flex justify-between items-center mb-4"><h2 className="text-2xl font-black italic uppercase text-white">Log Set</h2></div>
+          <div className="bg-zinc-900 p-5 rounded-3xl border border-zinc-800 shadow-xl mb-8 relative overflow-hidden">
             <form onSubmit={handleLog} className="space-y-4 relative z-10">
-              
-              {/* Templates & AI Custom */}
               <div>
-                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-2">Split Template</label>
-                <div className="flex gap-2 overflow-x-auto pb-2 snap-x hide-scrollbar">
+                <label className="text-[10px] font-bold text-zinc-500 uppercase block mb-2">Split Template</label>
+                <div className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
                   {Object.keys(TEMPLATES).map(t => (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => handleTemplateSelect(t)}
-                      className={`whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-bold border transition-colors shrink-0 snap-start ${activeTemplate === t ? 'bg-orange-500 text-black border-orange-500' : 'bg-zinc-950 text-zinc-400 border-zinc-700 hover:border-zinc-500'}`}
-                    >
-                      {t}
-                    </button>
+                    <button key={t} type="button" onClick={() => {setActiveTemplate(t); setExercise(TEMPLATES[t][0]);}} className={`whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-bold border transition-colors ${activeTemplate === t ? 'bg-orange-500 text-black border-orange-500' : 'bg-zinc-950 text-zinc-400 border-zinc-700'}`}>{t}</button>
                   ))}
-                  <button
-                     type="button"
-                     onClick={() => handleTemplateSelect('AI Custom ✨')}
-                     className={`whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-bold border transition-colors shrink-0 snap-start flex items-center gap-1 ${activeTemplate === 'AI Custom ✨' ? 'bg-indigo-500 text-white border-indigo-500' : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30 hover:border-indigo-500/80'}`}
-                  >
-                     <IconSparkles size={14} /> AI Custom
-                  </button>
                 </div>
-                
-                {/* AI Prompt Input */}
-                {activeTemplate === 'AI Custom ✨' && (
-                   <div className="mt-3 bg-indigo-950/30 border border-indigo-500/30 p-3 rounded-xl animate-in fade-in slide-in-from-top-2">
-                      {!customAiTemplate ? (
-                        <div className="flex gap-2">
-                           <input 
-                             type="text" 
-                             value={aiPrompt}
-                             onChange={e => setAiPrompt(e.target.value)}
-                             placeholder="E.g. Bad knees safe leg day..."
-                             className="flex-1 bg-black border border-indigo-500/50 rounded-lg p-2 text-white text-sm outline-none focus:border-indigo-400 placeholder:text-zinc-600"
-                           />
-                           <button 
-                             type="button" 
-                             disabled={isGeneratingRoutine || !aiPrompt}
-                             onClick={handleGenerateRoutine}
-                             className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-3 rounded-lg text-sm flex items-center gap-1 disabled:opacity-50"
-                           >
-                             {isGeneratingRoutine ? <IconLoader size={16} /> : 'Build'}
-                           </button>
-                        </div>
-                      ) : (
-                        <div className="flex justify-between items-center">
-                           <span className="text-xs text-indigo-300 font-bold">✨ Routine Built</span>
-                           <button type="button" onClick={() => {setCustomAiTemplate(null); setAiPrompt('');}} className="text-[10px] text-zinc-400 underline">Reset</button>
-                        </div>
-                      )}
-                   </div>
-                )}
               </div>
-
               <div className="h-px bg-zinc-800 my-1"></div>
-
-              {/* Exercise Details */}
               <div>
-                <div className="flex justify-between items-end mb-1">
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block">Exercise</label>
-                  <button 
-                    type="button"
-                    onClick={() => setShowSearchModal(true)}
-                    className="flex items-center gap-1 text-[10px] font-bold text-orange-500 bg-orange-500/10 px-2 py-1 rounded hover:bg-orange-500/20 transition-colors"
-                  >
-                    <IconSearch size={12} /> Database
-                  </button>
-                </div>
-                
-                <button 
-                  type="button"
-                  onClick={() => setShowSearchModal(true)}
-                  className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white font-bold outline-none focus:border-orange-500 transition-colors text-left flex justify-between items-center"
-                >
-                  <span>{exercise || "Select Exercise..."}</span>
-                  <IconSearch size={16} className="text-zinc-600" />
+                <button type="button" onClick={() => setShowSearchModal(true)} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white font-bold text-left flex justify-between items-center">
+                  <span>{exercise || "Select Exercise..."}</span> <IconSearch size={16} className="text-zinc-600" />
                 </button>
-                
-                {/* Quick Suggestions */}
                 <div className="flex flex-wrap gap-2 mt-2">
-                   {suggestedExercises.map(ex => (
-                     <button type="button" key={ex} onClick={() => setExercise(ex)} className={`text-[10px] px-2 py-1 rounded transition-colors ${exercise === ex ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' : 'bg-zinc-800 text-zinc-400 border border-transparent hover:bg-zinc-700'}`}>{ex}</button>
-                   ))}
+                  {suggestedExercises.map(ex => (
+                    <button type="button" key={ex} onClick={() => setExercise(ex)} className={`text-[10px] px-2 py-1 rounded transition-colors ${exercise === ex ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' : 'bg-zinc-800 text-zinc-400'}`}>{ex}</button>
+                  ))}
                 </div>
-
-                {/* Last Time Indicator */}
-                {lastSession && (
-                  <div className="mt-3 flex items-center gap-2 text-xs font-bold text-emerald-400 bg-emerald-500/10 px-3 py-2 rounded-lg border border-emerald-500/20">
-                    <IconActivity size={14} /> Last Session: {lastSession.weight}kg x {lastSession.reps}
-                  </div>
-                )}
               </div>
-              
+
+              {/* Progressive Overload Target Area */}
+              <div className="bg-black/50 rounded-2xl p-3 border border-zinc-800">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-[10px] font-bold text-zinc-500 uppercase">🎯 Target to Beat</span>
+                  <button type="button" onClick={() => setShowPastSets(!showPastSets)} className="text-[10px] text-orange-500 underline font-bold">{showPastSets ? 'Hide' : 'Full Detail'}</button>
+                </div>
+                {lastSets.length ? (
+                  <div className="flex flex-col gap-1">
+                    {showPastSets ? lastSets.map((s, i) => (
+                      <div key={i} className="flex justify-between text-sm text-zinc-300 font-mono"><span>Set {i+1}</span> <span>{s.weight}kg x {s.reps}</span></div>
+                    )) : (
+                      <div className="text-sm font-bold text-emerald-400">Last Session: {lastSets[0].weight}kg x {lastSets[0].reps} (Set 1)</div>
+                    )}
+                  </div>
+                ) : <div className="text-xs text-zinc-600 italic">No previous data for this exercise. Set the benchmark!</div>}
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                <div className="bg-zinc-800/40 p-2 rounded-lg border border-zinc-800">
+                  <span className="text-[9px] uppercase font-bold text-blue-500">Your PB</span>
+                  <div className="text-white font-mono text-sm font-bold">{myPB ? `${myPB.weight}kg x ${myPB.reps}` : '--'}</div>
+                </div>
+                <div className="bg-zinc-800/40 p-2 rounded-lg border border-zinc-800">
+                  <span className="text-[9px] uppercase font-bold text-emerald-500">{rival}'s PB</span>
+                  <div className="text-white font-mono text-sm font-bold">{rivalPB ? `${rivalPB.weight}kg x ${rivalPB.reps}` : '--'}</div>
+                </div>
+              </div>
+
               <div className="flex gap-3">
                 <div className="flex-1">
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-1">Weight (kg)</label>
-                  <input 
-                    type="number" 
-                    value={weight}
-                    onChange={e => setWeight(e.target.value)}
-                    placeholder="0"
-                    className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white font-mono font-bold text-lg outline-none focus:border-orange-500 transition-colors text-center"
-                  />
+                  <label className="text-[10px] font-bold text-zinc-500 uppercase block mb-1">Weight (kg)</label>
+                  <input type="number" value={weight} onChange={e => setWeight(e.target.value)} placeholder="0" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white font-mono font-bold text-lg outline-none focus:border-orange-500 text-center" />
                 </div>
                 <div className="flex-[1.5] min-w-0">
-                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-1">Target Reps</label>
+                  <label className="text-[10px] font-bold text-zinc-500 uppercase block mb-1">Reps</label>
                   <div className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar">
                     {REP_TARGETS.map(r => (
-                      <button
-                        key={r}
-                        type="button"
-                        onClick={() => setReps(r.toString())}
-                        className={`w-11 h-11 rounded-xl flex items-center justify-center font-mono font-bold text-sm border shrink-0 transition-colors ${reps === r.toString() ? 'bg-orange-500 text-black border-orange-500 shadow-md' : 'bg-zinc-950 text-zinc-400 border-zinc-700 hover:border-zinc-500'}`}
-                      >
-                        {r}
-                      </button>
+                      <button key={r} type="button" onClick={() => setReps(r.toString())} className={`w-11 h-11 rounded-xl flex items-center justify-center font-mono font-bold text-sm border shrink-0 ${reps === r.toString() ? 'bg-orange-500 text-black' : 'bg-zinc-950 text-zinc-400'}`}>{r}</button>
                     ))}
                   </div>
                 </div>
               </div>
-
-              <div>
-                 <div className="flex justify-between items-center mb-1">
-                   <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block">Trash Talk / Note</label>
-                   {/* Gemini Trash Talk Button */}
-                   <button 
-                     type="button" 
-                     disabled={isGeneratingNote || !exercise || !weight || !reps}
-                     onClick={handleGenerateNote}
-                     className="flex items-center gap-1 text-[9px] bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 px-2 py-1 rounded font-bold uppercase disabled:opacity-50 hover:bg-indigo-500/30 transition-colors"
-                   >
-                     {isGeneratingNote ? <IconLoader size={10} /> : <IconSparkles size={10} />} Auto-Roast
-                   </button>
-                 </div>
-                 <input 
-                    type="text" 
-                    value={note}
-                    onChange={e => setNote(e.target.value)}
-                    placeholder="Light weight baby..."
-                    className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-zinc-300 text-sm outline-none focus:border-orange-500 transition-colors"
-                  />
-              </div>
-
-              <button 
-                disabled={isSubmitting || !weight || !reps || !exercise}
-                className="w-full bg-orange-500 text-black font-black uppercase tracking-widest py-4 rounded-xl disabled:opacity-50 disabled:bg-zinc-800 disabled:text-zinc-500 active:scale-95 transition-all flex justify-center items-center gap-2 mt-4 shadow-xl shadow-orange-500/10"
-              >
-                {isSubmitting ? 'Pushing...' : 'Log It & Start Rest'} <IconArrowRight className="w-4 h-4" />
-              </button>
+              <button disabled={!weight || !exercise} className="w-full bg-orange-500 text-black font-black uppercase tracking-widest py-4 rounded-xl active:scale-95 transition-all flex justify-center items-center gap-2 mt-4 shadow-lg disabled:opacity-50">Log It & Start Rest <IconArrowRight size={16}/></button>
             </form>
           </div>
-
-          <div>
-            <h3 className="text-sm font-bold text-zinc-500 uppercase tracking-widest mb-3">Your Session Today</h3>
-            {todaysWorkouts.length === 0 ? (
-              <div className="text-zinc-600 text-sm text-center py-6 border border-dashed border-zinc-800 rounded-2xl">
-                Nothing logged today. Get to work!
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {todaysWorkouts.map((w, i) => (
-                  <div key={w.id} className="flex justify-between items-center p-3 bg-zinc-900 border border-zinc-800 rounded-xl">
-                    <div>
-                      <div className="font-bold text-sm text-white">{w.exercise}</div>
-                      {w.note && <div className="text-[10px] text-zinc-500">"{w.note}"</div>}
-                    </div>
-                    <div className="font-mono text-orange-400 font-bold text-sm">
-                      {w.weight}kg <span className="text-zinc-600 font-sans px-1">x</span> {w.reps}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {showSearchModal && (
-            <ExerciseSearchModal 
-              onClose={() => setShowSearchModal(false)} 
-              onSelect={handleSelectFromDB} 
-              exerciseDB={exerciseDB} 
-              customExercises={customExercises}
-            />
-          )}
+          {showSearchModal && <ExerciseSearchModal onClose={() => setShowSearchModal(false)} onSelect={(ex) => {setExercise(ex); setShowSearchModal(false);}} exerciseDB={exerciseDB} customExercises={customExercises} />}
         </div>
       );
     }
 
     function ExerciseSearchModal({ onClose, onSelect, exerciseDB, customExercises }) {
       const [query, setQuery] = useState('');
-      const [selectedEx, setSelectedEx] = useState(null);
-      const [isAdding, setIsAdding] = useState(false);
-
-      const allExercises = useMemo(() => {
-        const customMapped = (customExercises || []).map(c => ({ name: c.name, category: "Custom", equipment: "Any", isCustom: true }));
-        return [...customMapped, ...exerciseDB];
-      }, [exerciseDB, customExercises]);
-
-      const results = useMemo(() => {
-        if (!query) return allExercises.slice(0, 20);
-        return allExercises.filter(ex => ex.name.toLowerCase().includes(query.toLowerCase())).slice(0, 30);
-      }, [query, allExercises]);
-
-      const handleAddCustom = async () => {
-        if (!query.trim()) return;
-        setIsAdding(true);
-        try {
-          const newEx = { name: query.trim(), category: "Custom", timestamp: Date.now() };
-          await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'custom_exercises'), newEx);
-          onSelect(newEx.name);
-        } catch (e) {
-          console.error("Error adding custom exercise:", e);
-        }
-        setIsAdding(false);
-      };
-
+      const allExercises = useMemo(() => [...(customExercises || []).map(c => ({ name: c.name, isCustom: true })), ...exerciseDB], [exerciseDB, customExercises]);
+      const results = useMemo(() => query ? allExercises.filter(ex => ex.name.toLowerCase().includes(query.toLowerCase())).slice(0, 30) : allExercises.slice(0, 20), [query, allExercises]);
       return (
-        <div className="fixed inset-0 bg-black/95 z-[60] flex flex-col items-center justify-start p-4 backdrop-blur-sm overflow-hidden animate-in fade-in">
-           <div className="w-full max-w-md h-full flex flex-col bg-zinc-950 border border-zinc-800 rounded-2xl overflow-hidden mt-4 mb-safe">
-             
-             <div className="flex justify-between items-center p-4 border-b border-zinc-800 bg-zinc-900">
-               <h3 className="font-bold text-lg text-white">Database</h3>
-               <button onClick={onClose} className="p-2 bg-zinc-800 rounded-full text-zinc-400 hover:text-white"><IconX className="w-4 h-4"/></button>
-             </div>
-
-             {!selectedEx ? (
-               <>
-                 <div className="p-4 border-b border-zinc-800">
-                   <div className="relative">
-                     <IconSearch className="w-5 h-5 absolute left-3 top-3 text-zinc-500" />
-                     <input 
-                       type="text" 
-                       value={query} 
-                       onChange={e => setQuery(e.target.value)}
-                       placeholder="Search 800+ exercises..."
-                       className="w-full bg-black border border-zinc-800 rounded-xl py-3 pl-10 pr-4 text-white text-sm outline-none focus:border-orange-500"
-                       autoFocus
-                     />
-                   </div>
-                 </div>
-                 
-                 <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                   {results.length === 0 ? (
-                     <div className="text-center p-6 flex flex-col items-center justify-center">
-                       <p className="text-zinc-400 text-sm mb-4">No exercises found matching "{query}".</p>
-                       <button 
-                         onClick={handleAddCustom} 
-                         disabled={isAdding || !query.trim()} 
-                         className="bg-zinc-800 border border-zinc-700 hover:border-orange-500 text-white font-bold px-4 py-3 rounded-xl transition-colors w-full flex justify-center items-center gap-2"
-                       >
-                         {isAdding ? <IconLoader size={16} /> : <IconPlus size={16} />} 
-                         Add "{query}" as Custom
-                       </button>
-                     </div>
-                   ) : (
-                     results.map(ex => {
-                       const imgPath = !ex.isCustom && ex.images && ex.images.length > 0 ? `${IMG_BASE_URL}${ex.name.replace(/ /g, '_').replace(/\//g, '_')}/0.jpg` : null;
-                       return (
-                         <button key={ex.name} onClick={() => setSelectedEx(ex)} className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-900 transition text-left">
-                           {imgPath ? (
-                             <div className="w-12 h-12 rounded bg-zinc-800 bg-cover bg-center shrink-0" style={{backgroundImage: `url('${imgPath}')`}} />
-                           ) : (
-                             <div className="w-12 h-12 rounded bg-zinc-800 flex items-center justify-center shrink-0 text-zinc-600"><IconDumbbell size={16}/></div>
-                           )}
-                           <div>
-                             <div className="font-bold text-sm text-white">{ex.name}</div>
-                             <div className="text-[10px] text-zinc-500">{ex.category} • {ex.equipment || 'Bodyweight'}</div>
-                           </div>
-                         </button>
-                       );
-                     })
-                   )}
-                 </div>
-               </>
-             ) : (
-               <div className="flex-1 flex flex-col overflow-hidden">
-                 <div className="p-4 flex gap-2 items-center bg-zinc-900 border-b border-zinc-800">
-                   <button onClick={() => setSelectedEx(null)} className="text-orange-500 text-sm font-bold flex items-center gap-1">← Back</button>
-                 </div>
-                 <div className="flex-1 overflow-y-auto p-4 space-y-6">
-                   <h2 className="text-2xl font-black text-white">{selectedEx.name}</h2>
-                   
-                   <div className="flex gap-2 overflow-x-auto snap-x hide-scrollbar">
-                      {selectedEx.images?.map((img, i) => (
-                        <img 
-                          key={i} 
-                          src={`${IMG_BASE_URL}${selectedEx.name.replace(/ /g, '_').replace(/\//g, '_')}/${i}.jpg`} 
-                          className="w-full h-64 object-cover rounded-xl border border-zinc-800 shrink-0 snap-center"
-                          onError={(e) => e.target.style.display = 'none'}
-                          alt={`${selectedEx.name} step ${i+1}`}
-                        />
-                      ))}
-                   </div>
-
-                   <div className="grid grid-cols-2 gap-3">
-                     <div className="bg-zinc-900 p-3 rounded-xl border border-zinc-800">
-                       <div className="text-[10px] text-zinc-500 uppercase font-bold mb-1">Target Muscle</div>
-                       <div className="text-orange-400 font-bold capitalize text-sm">{(selectedEx.primaryMuscles || []).join(', ') || 'General'}</div>
-                     </div>
-                     <div className="bg-zinc-900 p-3 rounded-xl border border-zinc-800">
-                       <div className="text-[10px] text-zinc-500 uppercase font-bold mb-1">Equipment</div>
-                       <div className="text-white font-bold capitalize text-sm">{selectedEx.equipment || 'Body only'}</div>
-                     </div>
-                   </div>
-
-                   {selectedEx.instructions && (
-                     <div>
-                       <h4 className="font-bold text-white mb-3 text-sm uppercase tracking-widest">Instructions</h4>
-                       <ol className="list-decimal pl-5 space-y-2 text-zinc-400 text-sm leading-relaxed">
-                         {selectedEx.instructions.map((step, i) => <li key={i}>{step}</li>)}
-                       </ol>
-                     </div>
-                   )}
-                 </div>
-                 
-                 <div className="p-4 border-t border-zinc-800 bg-black">
-                   <button onClick={() => onSelect(selectedEx.name)} className="w-full bg-orange-500 text-black font-black uppercase tracking-widest py-4 rounded-xl active:scale-95 transition-all">
-                     Use This Exercise
-                   </button>
-                 </div>
-               </div>
-             )}
-           </div>
+        <div className="fixed inset-0 bg-black/95 z-[60] flex flex-col p-4 animate-in fade-in backdrop-blur-sm">
+          <div className="w-full max-w-md mx-auto h-full flex flex-col bg-zinc-950 border border-zinc-800 rounded-2xl overflow-hidden mt-4">
+            <div className="flex justify-between items-center p-4 border-b border-zinc-800 bg-zinc-900"><h3 className="font-bold">Exercise Database</h3><button onClick={onClose} className="p-2 bg-zinc-800 rounded-full"><IconX size={16}/></button></div>
+            <div className="p-4 border-b border-zinc-800"><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search exercises..." className="w-full bg-black border border-zinc-800 rounded-xl py-3 px-4 text-white text-sm focus:border-orange-500 outline-none" autoFocus /></div>
+            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+              {results.length ? results.map(ex => (
+                <button key={ex.name} onClick={() => onSelect(ex.name)} className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-900 text-left">
+                  <div className="w-10 h-10 rounded bg-zinc-800 flex items-center justify-center shrink-0 text-zinc-600"><IconDumbbell size={16}/></div>
+                  <div><div className="font-bold text-sm text-white">{ex.name}</div><div className="text-[10px] text-zinc-500">{ex.isCustom ? 'Custom Movement' : ex.category}</div></div>
+                </button>
+              )) : <div className="p-10 text-center"><button onClick={async () => { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'custom_exercises'), { name: query.trim() }); onSelect(query.trim()); }} className="bg-zinc-800 px-4 py-2 rounded-xl text-orange-500 font-bold border border-orange-500/20">Add "{query}" as Custom</button></div>}
+            </div>
+          </div>
         </div>
       );
     }
 
     function Diet({ habits, localUser }) {
-      const todayStr = new Date().toISOString().split('T')[0];
-      const [isSaving, setIsSaving] = useState(false);
-
-      const todayHabit = habits.find(h => h.user === localUser && h.date === todayStr) || {
-        calories: false, protein: false, water: false, noAlcohol: false
-      };
-
-      const toggleHabit = async (field) => {
-        setIsSaving(true);
-        try {
-          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'habits', `${localUser}_${todayStr}`);
-          
-          await setDoc(docRef, {
-            user: localUser,
-            date: todayStr,
-            timestamp: Date.now(),
-            calories: field === 'calories' ? !todayHabit.calories : todayHabit.calories,
-            protein: field === 'protein' ? !todayHabit.protein : todayHabit.protein,
-            water: field === 'water' ? !todayHabit.water : todayHabit.water,
-            noAlcohol: field === 'noAlcohol' ? !todayHabit.noAlcohol : todayHabit.noAlcohol,
-          });
-        } catch (e) { console.error(e); }
-        setIsSaving(false);
-      };
-
+      const today = new Date().toISOString().split('T')[0];
+      const todayHabit = habits.find(h => h.user === localUser && h.date === today) || { calories: false, protein: false, water: false, noAlcohol: false };
       const checks = [
-        { id: 'calories', label: 'Hit Calorie Target', icon: <IconFlame className="w-5 h-5" />, activeText: 'text-orange-500', activeBg: 'bg-orange-500', activeBorder: 'border-orange-500', activeRing: 'border-orange-500/50' },
-        { id: 'protein', label: 'Hit Protein Goal', icon: <IconUtensils className="w-5 h-5" />, activeText: 'text-red-500', activeBg: 'bg-red-500', activeBorder: 'border-red-500', activeRing: 'border-red-500/50' },
-        { id: 'water', label: 'Drank 3L Water', icon: <IconDroplets className="w-5 h-5" />, activeText: 'text-blue-500', activeBg: 'bg-blue-500', activeBorder: 'border-blue-500', activeRing: 'border-blue-500/50' },
-        { id: 'noAlcohol', label: 'No Alcohol', icon: <IconBan className="w-5 h-5" />, activeText: 'text-emerald-500', activeBg: 'bg-emerald-500', activeBorder: 'border-emerald-500', activeRing: 'border-emerald-500/50' },
+        { id: 'calories', label: 'Hit Calories', icon: <IconFlame size={20} />, color: 'orange' },
+        { id: 'protein', label: 'Hit Protein', icon: <IconUtensils size={20} />, color: 'red' },
+        { id: 'water', label: '3L Water', icon: <IconActivity size={20} />, color: 'blue' },
+        { id: 'noAlcohol', label: 'No Alcohol', icon: <IconBan size={20} />, color: 'emerald' },
       ];
-
+      const toggle = async (id) => {
+        try { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'habits', `${localUser}_${today}`), { user: localUser, date: today, timestamp: Date.now(), ...todayHabit, [id]: !todayHabit[id] }); } catch(e) {}
+      };
       return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-          <div className="mb-6">
-            <h2 className="text-2xl font-black italic uppercase text-white mb-1">Daily Checklist</h2>
-            <p className="text-zinc-500 text-sm">Tick these off every single day.</p>
-          </div>
-
+          <h2 className="text-2xl font-black italic uppercase text-white mb-6">Daily Checklist</h2>
           <div className="space-y-3">
-            {checks.map(check => {
-              const isChecked = todayHabit[check.id];
+            {checks.map(c => {
+              const active = todayHabit[c.id];
               return (
-                <button 
-                  key={check.id}
-                  disabled={isSaving}
-                  onClick={() => toggleHabit(check.id)}
-                  className={`w-full flex items-center p-4 rounded-2xl border transition-all active:scale-95 ${isChecked ? `${check.activeRing} bg-zinc-900` : 'border-zinc-800 bg-zinc-950 hover:bg-zinc-900'}`}
-                >
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center mr-4 ${isChecked ? `${check.activeBg}/20 ${check.activeText}` : 'bg-zinc-900 text-zinc-600'}`}>
-                    {check.icon}
-                  </div>
-                  <div className="flex-1 text-left">
-                    <div className={`font-bold text-lg ${isChecked ? 'text-white' : 'text-zinc-400'}`}>{check.label}</div>
-                  </div>
-                  <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${isChecked ? `${check.activeBorder} ${check.activeBg}` : 'border-zinc-700'}`}>
-                    {isChecked && <div className="w-2 h-2 bg-black rounded-full"></div>}
-                  </div>
+                <button key={c.id} onClick={() => toggle(c.id)} className={`w-full flex items-center p-4 rounded-2xl border transition-all active:scale-95 ${active ? `border-${c.color}-500/50 bg-zinc-900` : 'border-zinc-800 bg-zinc-950'}`}>
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center mr-4 ${active ? `bg-${c.color}-500/20 text-${c.color}-500` : 'bg-zinc-900 text-zinc-600'}`}>{c.icon}</div>
+                  <span className={`font-bold text-lg flex-1 text-left ${active ? 'text-white' : 'text-zinc-500'}`}>{c.label}</span>
+                  <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${active ? `border-${c.color}-500 bg-${c.color}-500` : 'border-zinc-700'}`}>{active && <div className="w-2 h-2 bg-black rounded-full"></div>}</div>
                 </button>
               );
             })}
@@ -963,158 +436,33 @@
     function History({ workouts, habits, profiles, localUser }) {
       const [viewUser, setViewUser] = useState(localUser);
       const [currentDate, setCurrentDate] = useState(new Date());
-
-      const year = currentDate.getFullYear();
-      const month = currentDate.getMonth();
-
-      const daysInMonth = new Date(year, month + 1, 0).getDate();
-      const firstDay = new Date(year, month, 1).getDay();
-
-      const blanks = Array(firstDay).fill(null);
-      const days = Array.from({length: daysInMonth}, (_, i) => i + 1);
-
-      const monthName = currentDate.toLocaleString('default', { month: 'long' });
-
-      // Local Date formatter YYYY-MM-DD
-      const fmt = (dateObj) => {
-        return `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
-      };
-
-      // Weekly Workout target calc (Monday -> Sunday)
-      const targetWorkouts = profiles[viewUser]?.targetWorkouts || 4;
-      const weekWorkoutsCount = useMemo(() => {
-        const now = new Date();
-        const currentDay = now.getDay();
-        const distanceToMonday = (currentDay === 0 ? 6 : currentDay - 1);
-        const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - distanceToMonday);
-        monday.setHours(0,0,0,0);
-
-        const currentWeekWorkouts = workouts.filter(w => {
-            if (w.user !== viewUser) return false;
-            const [y, m, d] = w.date.split('-');
-            const wDate = new Date(y, m - 1, d);
-            return wDate >= monday;
-        });
-        return new Set(currentWeekWorkouts.map(w => w.date)).size;
-      }, [workouts, viewUser]);
-
-      // Perfect Diet Streak calc
-      const streak = useMemo(() => {
-        const perfDays = new Set(
-            habits
-              .filter(h => h.user === viewUser && h.calories && h.protein && h.water && h.noAlcohol)
-              .map(h => h.date)
-        );
-        let count = 0;
-        let d = new Date();
-        let dStr = fmt(d);
-        
-        // If today is perfect, count it. Otherwise, check if today is actively failed.
-        if (perfDays.has(dStr)) {
-            count++;
-        } else {
-            const todayLogged = habits.some(h => h.user === viewUser && h.date === dStr);
-            if (todayLogged) return 0; // Logged today but not perfect = broken streak
-        }
-        
-        // Count backwards
-        d.setDate(d.getDate() - 1);
-        while (true) {
-            dStr = fmt(d);
-            if (perfDays.has(dStr)) {
-                count++;
-                d.setDate(d.getDate() - 1);
-            } else {
-                break;
-            }
-        }
-        return count;
-      }, [habits, viewUser]);
-
-      // Calendar Dots calc
       const monthData = useMemo(() => {
-        const wDays = new Set();
-        const dDays = new Set();
-        workouts.forEach(w => { if(w.user === viewUser) wDays.add(w.date) });
-        habits.forEach(h => {
-           if(h.user === viewUser && h.calories && h.protein && h.water && h.noAlcohol) dDays.add(h.date);
-        });
-        return { wDays, dDays };
+        const w = new Set(); const d = new Set();
+        workouts.forEach(x => { if(x.user === viewUser) w.add(x.date) });
+        habits.forEach(x => { if(x.user === viewUser && x.calories && x.protein && x.water && x.noAlcohol) d.add(x.date) });
+        return { w, d };
       }, [workouts, habits, viewUser]);
-
-      // UI Theme per user
-      const theme = viewUser === 'Jordan' ? {
-        bg: 'bg-blue-500', btnBg: 'bg-blue-600', text: 'text-blue-500', border: 'border-blue-400', shadow: 'shadow-[0_0_15px_rgba(59,130,246,0.3)]', line: 'bg-blue-500/20'
-      } : {
-        bg: 'bg-emerald-500', btnBg: 'bg-emerald-600', text: 'text-emerald-500', border: 'border-emerald-400', shadow: 'shadow-[0_0_15px_rgba(16,185,129,0.3)]', line: 'bg-emerald-500/20'
-      };
+      
+      const days = Array.from({length: new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate()}, (_, i) => i + 1);
+      const first = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
 
       return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-          <div className="mb-6">
-            <h2 className="text-2xl font-black italic uppercase text-white mb-1">Tracker</h2>
-            <p className="text-zinc-500 text-sm">Stay on target for Turkey.</p>
-          </div>
-
-          {/* User Toggle */}
           <div className="flex bg-zinc-900 rounded-xl p-1 mb-6 border border-zinc-800">
-            <button onClick={() => setViewUser('Jordan')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewUser === 'Jordan' ? 'bg-blue-600 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}>Jordan</button>
-            <button onClick={() => setViewUser('Aaron')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewUser === 'Aaron' ? 'bg-emerald-600 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}>Aaron</button>
+            {['Jordan','Aaron'].map(u => <button key={u} onClick={() => setViewUser(u)} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewUser === u ? 'bg-orange-500 text-black shadow-md' : 'text-zinc-500'}`}>{u}</button>)}
           </div>
-
-          {/* Quick Stats */}
-          <div className="grid grid-cols-2 gap-3 mb-6">
-            <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-2xl flex flex-col items-center justify-center relative overflow-hidden">
-               <div className={`absolute top-0 w-full h-1 ${theme.line}`}></div>
-               <IconDumbbell className={`${theme.text} w-6 h-6 mb-2`} />
-               <div className="text-2xl font-black text-white">{weekWorkoutsCount} <span className="text-sm text-zinc-500">/ {targetWorkouts}</span></div>
-               <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mt-1">This Week</div>
-            </div>
-            <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-2xl flex flex-col items-center justify-center relative overflow-hidden">
-               <div className={`absolute top-0 w-full h-1 ${theme.line}`}></div>
-               <IconFlame className={`${theme.text} w-6 h-6 mb-2`} />
-               <div className="text-2xl font-black text-white">{streak} <span className="text-sm text-zinc-500">days</span></div>
-               <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mt-1">Diet Streak</div>
-            </div>
-          </div>
-
           <div className="bg-zinc-950 p-5 rounded-3xl border border-zinc-800 shadow-xl">
              <div className="flex justify-between items-center mb-6">
-                <button onClick={() => setCurrentDate(new Date(year, month - 1, 1))} className="p-3 bg-zinc-900 hover:bg-zinc-800 rounded-xl text-zinc-400 font-bold transition-colors">←</button>
-                <h3 className="font-bold text-lg text-white">{monthName} {year}</h3>
-                <button onClick={() => setCurrentDate(new Date(year, month + 1, 1))} className="p-3 bg-zinc-900 hover:bg-zinc-800 rounded-xl text-zinc-400 font-bold transition-colors">→</button>
+                <button onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth()-1)))} className="p-3 bg-zinc-900 rounded-xl">←</button>
+                <h3 className="font-bold">{currentDate.toLocaleString('default', { month: 'long', year:'numeric' })}</h3>
+                <button onClick={() => setCurrentDate(new Date(currentDate.setMonth(currentDate.getMonth()+1)))} className="p-3 bg-zinc-900 rounded-xl">→</button>
              </div>
-             
-             <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-zinc-600 mb-3">
-                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <div key={d}>{d}</div>)}
-             </div>
-             
              <div className="grid grid-cols-7 gap-2">
-                {blanks.map((_, i) => <div key={`blank-${i}`} className="aspect-square" />)}
+                {Array(first).fill(null).map((_, i) => <div key={i} />)}
                 {days.map(d => {
-                   const dStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-                   const isWorkout = monthData.wDays.has(dStr);
-                   const isPerfectDiet = monthData.dDays.has(dStr);
-                   const isToday = fmt(new Date()) === dStr;
-
-                   return (
-                     <div key={d} className={`relative aspect-square rounded-xl flex items-center justify-center font-bold text-sm border transition-colors
-                       ${isWorkout ? `${theme.bg} text-black ${theme.border} ${theme.shadow}` : 'bg-zinc-900 text-zinc-500 border-zinc-800'}
-                       ${isToday && !isWorkout ? 'ring-2 ring-white text-white' : ''}
-                       ${isToday && isWorkout ? 'ring-2 ring-white text-black' : ''}
-                     `}>
-                       {d}
-                       {isPerfectDiet && (
-                         <div className={`absolute bottom-1 right-1 w-2 h-2 ${isWorkout ? 'bg-white' : 'bg-orange-500'} rounded-full shadow-md`}></div>
-                       )}
-                     </div>
-                   )
+                  const ds = `${currentDate.getFullYear()}-${String(currentDate.getMonth()+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                  return <div key={d} className={`aspect-square rounded-xl flex items-center justify-center font-bold text-sm relative border ${monthData.w.has(ds) ? 'bg-orange-500 text-black' : 'bg-zinc-900 text-zinc-500 border-zinc-800'}`}>{d}{monthData.d.has(ds) && <div className="absolute bottom-1 right-1 w-2 h-2 bg-blue-400 rounded-full" />}</div>
                 })}
-             </div>
-
-             <div className="flex justify-center gap-4 mt-6 text-[10px] font-bold uppercase text-zinc-500">
-               <div className="flex items-center gap-1"><div className={`w-3 h-3 ${theme.bg} rounded flex-shrink-0`}></div> Workout</div>
-               <div className="flex items-center gap-1"><div className="w-2 h-2 bg-orange-500 rounded-full flex-shrink-0"></div> Perfect Diet</div>
              </div>
           </div>
         </div>
@@ -1122,188 +470,106 @@
     }
 
     function Profile({ profiles, localUser, onLogout }) {
-      const [isSaving, setIsSaving] = useState(false);
-      const userProfile = profiles[localUser] || { currentWeight: '', goalWeight: '', targetWorkouts: '4', motivation: '' };
-      
-      const [formData, setFormData] = useState({
-        currentWeight: userProfile.currentWeight || '',
-        goalWeight: userProfile.goalWeight || '',
-        targetWorkouts: userProfile.targetWorkouts || '4',
-        motivation: userProfile.motivation || ''
-      });
-
-      const handleSave = async (e) => {
-        e.preventDefault();
-        setIsSaving(true);
-        try {
-          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'profiles', localUser);
-          await setDoc(docRef, formData);
-        } catch(err) { console.error(err); }
-        setIsSaving(false);
-      };
-
+      const prof = profiles[localUser] || {};
+      const [form, setForm] = useState({ currentWeight: prof.currentWeight || '', goalWeight: prof.goalWeight || '', targetWorkouts: prof.targetWorkouts || '4', motivation: prof.motivation || '' });
       return (
-        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-          <div className="mb-6">
-            <h2 className="text-2xl font-black italic uppercase text-white mb-1">Your Goals</h2>
-            <p className="text-zinc-500 text-sm">Set your targets. Make them public.</p>
-          </div>
-
-          <form onSubmit={handleSave} className="space-y-4">
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-4">
+          <h2 className="text-2xl font-black italic uppercase text-white mb-6">Profile & Goals</h2>
+          <div className="bg-zinc-900 p-5 rounded-3xl border border-zinc-800 space-y-4">
             <div className="grid grid-cols-2 gap-3">
-              <div className="bg-zinc-900 p-4 rounded-2xl border border-zinc-800">
-                 <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-2">Current Weight (kg)</label>
-                 <input type="number" value={formData.currentWeight} onChange={e => setFormData({...formData, currentWeight: e.target.value})} className="w-full bg-black border border-zinc-700 rounded-xl p-3 text-white font-mono font-bold text-lg outline-none focus:border-orange-500 text-center" placeholder="e.g. 85" />
-              </div>
-              <div className="bg-zinc-900 p-4 rounded-2xl border border-zinc-800">
-                 <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-2 text-orange-500">Goal Weight (kg)</label>
-                 <input type="number" value={formData.goalWeight} onChange={e => setFormData({...formData, goalWeight: e.target.value})} className="w-full bg-black border border-orange-500/30 rounded-xl p-3 text-orange-400 font-mono font-bold text-lg outline-none focus:border-orange-500 text-center" placeholder="e.g. 78" />
-              </div>
+              <div><label className="text-[10px] font-bold text-zinc-500 uppercase block mb-1">Current (kg)</label><input type="number" value={form.currentWeight} onChange={e => setForm({...form, currentWeight: e.target.value})} className="w-full bg-black border border-zinc-700 rounded-xl p-3 text-white font-mono" /></div>
+              <div><label className="text-[10px] font-bold text-orange-500 uppercase block mb-1">Goal (kg)</label><input type="number" value={form.goalWeight} onChange={e => setForm({...form, goalWeight: e.target.value})} className="w-full bg-black border border-zinc-700 rounded-xl p-3 text-white font-mono" /></div>
             </div>
-
-            <div className="bg-zinc-900 p-4 rounded-2xl border border-zinc-800">
-               <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-2 flex justify-between">
-                 <span>Target Workouts / Week</span>
-                 <span className="text-white">{formData.targetWorkouts} days</span>
-               </label>
-               <input type="range" min="1" max="7" value={formData.targetWorkouts} onChange={e => setFormData({...formData, targetWorkouts: e.target.value})} className="w-full accent-orange-500" />
-            </div>
-
-            <div className="bg-zinc-900 p-4 rounded-2xl border border-zinc-800">
-               <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-2">Motivation Quote / Trash Talk</label>
-               <textarea value={formData.motivation} onChange={e => setFormData({...formData, motivation: e.target.value})} className="w-full bg-black border border-zinc-700 rounded-xl p-3 text-zinc-300 text-sm outline-none focus:border-orange-500" rows="3" placeholder="I will not be outworked by Aaron..." />
-            </div>
-
-            <button disabled={isSaving} className="w-full bg-orange-500 text-black font-black uppercase tracking-widest py-4 rounded-xl active:scale-95 transition-all">
-              {isSaving ? 'Saving...' : 'Lock It In'}
-            </button>
-            
-            <button type="button" onClick={onLogout} className="w-full bg-zinc-900 border border-zinc-800 text-zinc-500 font-bold uppercase tracking-widest py-4 rounded-xl active:scale-95 transition-all mt-4 hover:bg-zinc-800 hover:text-white">
-              Switch User
-            </button>
-          </form>
+            <div><label className="text-[10px] font-bold text-zinc-500 uppercase block mb-1">Weekly Target: {form.targetWorkouts} sessions</label><input type="range" min="1" max="7" value={form.targetWorkouts} onChange={e => setForm({...form, targetWorkouts: e.target.value})} className="w-full accent-orange-500" /></div>
+            <div><label className="text-[10px] font-bold text-zinc-500 uppercase block mb-1">Motivation</label><textarea value={form.motivation} onChange={e => setForm({...form, motivation: e.target.value})} className="w-full bg-black border border-zinc-700 rounded-xl p-3 text-sm text-zinc-300" rows="2" /></div>
+            <button onClick={async () => { await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', localUser), form); alert('Saved!'); }} className="w-full bg-orange-500 text-black font-black uppercase py-4 rounded-xl">Save Changes</button>
+            <button onClick={onLogout} className="w-full bg-zinc-800 text-zinc-500 font-bold uppercase py-4 rounded-xl">Logout</button>
+          </div>
         </div>
       );
     }
 
     function Stats({ workouts, habits, profiles }) {
       const users = ['Jordan', 'Aaron'];
+      const stats = useMemo(() => {
+        const calculate = (user) => {
+          const prof = profiles[user] || {};
+          const target = parseInt(prof.targetWorkouts || 4);
+          const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+          const workoutDays = new Set(workouts.filter(w => w.user === user && new Date(w.date) >= thirtyDaysAgo).map(w => w.date)).size;
+          const consistency = Math.min(Math.round((workoutDays / (target * 4)) * 100), 100);
+          const fourteenDaysAgo = new Date(); fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+          const pbs = workouts.filter(w => w.user === user && w.timestamp >= fourteenDaysAgo.getTime()).reduce((acc, curr) => {
+              const prev = workouts.filter(w => w.user === user && w.exercise === curr.exercise && w.timestamp < curr.timestamp);
+              if (prev.length && curr.weight > Math.max(...prev.map(p => p.weight))) return acc + 1;
+              return acc;
+          }, 0);
+          const perfDays = new Set(habits.filter(h => h.user === user && h.calories && h.protein && h.water && h.noAlcohol).map(h => h.date));
+          let streak = 0; let d = new Date();
+          while(perfDays.has(d.toISOString().split('T')[0])) { streak++; d.setDate(d.getDate()-1); }
+          const readiness = Math.round((consistency * 0.4) + (streak * 5) + (pbs * 5));
+          return { consistency, pbs, streak, readiness: Math.min(readiness, 100) };
+        };
+        return { Jordan: calculate('Jordan'), Aaron: calculate('Aaron') };
+      }, [workouts, habits, profiles]);
 
-      // Calculate workouts in last 7 days
-      const getRecentWorkoutsCount = (user) => {
-        const sevenDaysAgo = new Date();
-        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-        const recent = workouts.filter(w => w.user === user && new Date(w.date) >= sevenDaysAgo);
-        const uniqueDays = new Set(recent.map(w => w.date));
-        return uniqueDays.size;
-      };
-
-      const getPB = (user, exercise) => {
-        const userSets = workouts.filter(w => w.user === user && w.exercise === exercise);
-        if (userSets.length === 0) return 0;
-        return Math.max(...userSets.map(w => w.weight));
-      };
-
-      const stats = {
-        workouts: { 
-          Jordan: getRecentWorkoutsCount('Jordan'), 
-          Aaron: getRecentWorkoutsCount('Aaron'), 
-          label: 'Workouts (Last 7 Days)',
-          targetJordan: profiles['Jordan']?.targetWorkouts || 4,
-          targetAaron: profiles['Aaron']?.targetWorkouts || 4,
-        },
-        bench: { Jordan: getPB('Jordan', 'Bench Press'), Aaron: getPB('Aaron', 'Bench Press'), label: 'Bench Press PB' },
-        squat: { Jordan: getPB('Jordan', 'Squat'), Aaron: getPB('Aaron', 'Squat'), label: 'Squat PB' },
-        deadlift: { Jordan: getPB('Jordan', 'Deadlift'), Aaron: getPB('Aaron', 'Deadlift'), label: 'Deadlift PB' },
-      };
-
-      const renderBar = (statKey) => {
-        const data = stats[statKey];
-        let jPct, aPct, max;
-
-        if (statKey === 'workouts') {
-           jPct = Math.min((data.Jordan / data.targetJordan) * 100, 100);
-           aPct = Math.min((data.Aaron / data.targetAaron) * 100, 100);
-        } else {
-           max = Math.max(data.Jordan, data.Aaron, 1); 
-           jPct = (data.Jordan / max) * 100;
-           aPct = (data.Aaron / max) * 100;
+      useEffect(() => {
+        const labels = []; const jVol = []; const aVol = [];
+        for (let i = 13; i >= 0; i--) {
+            const d = new Date(); d.setDate(d.getDate() - i); const ds = d.toISOString().split('T')[0];
+            labels.push(d.toLocaleDateString('en-US', { day: 'numeric', month:'short' }));
+            jVol.push(workouts.filter(w => w.user === 'Jordan' && w.date === ds).reduce((a,b) => a + (b.weight * b.reps), 0));
+            aVol.push(workouts.filter(w => w.user === 'Aaron' && w.date === ds).reduce((a,b) => a + (b.weight * b.reps), 0));
         }
+        const ctx = document.getElementById('volumeChart');
+        if (window.vChart) window.vChart.destroy();
+        window.vChart = new Chart(ctx, {
+            type: 'line',
+            data: { labels, datasets: [
+                { label: 'Jordan', data: jVol, borderColor: '#3b82f6', tension: 0.4, fill: true, backgroundColor: 'rgba(59, 130, 246, 0.1)' },
+                { label: 'Aaron', data: aVol, borderColor: '#10b981', tension: 0.4, fill: true, backgroundColor: 'rgba(16, 185, 129, 0.1)' }
+            ]},
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#27272a' } }, x: { grid: { display: false } } } }
+        });
+      }, [workouts]);
 
-        return (
-          <div className="mb-6 last:mb-0">
-            <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest text-center mb-3">{data.label}</h3>
-            
-            <div className="flex flex-col gap-2">
-              {/* Jordan Bar */}
-              <div className="flex items-center gap-3">
-                 <div className="w-12 text-right font-bold text-xs text-blue-500">Jord</div>
-                 <div className="flex-1 bg-zinc-900 h-6 rounded-full overflow-hidden flex items-center border border-zinc-800">
-                   <div className="h-full bg-blue-500 rounded-full transition-all duration-1000 ease-out" style={{ width: `${jPct}%` }}></div>
-                 </div>
-                 <div className="w-16 font-mono text-sm font-bold text-right">
-                   {data.Jordan} {statKey === 'workouts' && <span className="text-[10px] text-zinc-500">/ {data.targetJordan}</span>}
-                 </div>
-              </div>
-
-              {/* Aaron Bar */}
-              <div className="flex items-center gap-3">
-                 <div className="w-12 text-right font-bold text-xs text-emerald-500">Aar</div>
-                 <div className="flex-1 bg-zinc-900 h-6 rounded-full overflow-hidden flex items-center border border-zinc-800">
-                   <div className="h-full bg-emerald-500 rounded-full transition-all duration-1000 ease-out" style={{ width: `${aPct}%` }}></div>
-                 </div>
-                 <div className="w-16 font-mono text-sm font-bold text-right">
-                   {data.Aaron} {statKey === 'workouts' && <span className="text-[10px] text-zinc-500">/ {data.targetAaron}</span>}
-                 </div>
-              </div>
-            </div>
+      const renderBar = (label, jordanVal, aaronVal, suffix = "") => (
+        <div className="space-y-2 mb-6">
+          <div className="flex justify-between items-center px-1"><span className="text-[10px] font-black uppercase text-zinc-500">{label}</span></div>
+          <div className="flex items-center gap-3">
+            <span className="w-10 text-[10px] font-bold text-blue-500">JORD</span>
+            <div className="flex-1 h-3 bg-zinc-900 rounded-full border border-zinc-800 overflow-hidden"><div className="h-full bg-blue-500 rounded-full transition-all duration-1000" style={{ width: `${jordanVal}%` }} /></div>
+            <span className="w-8 text-[10px] font-mono font-bold text-right">{jordanVal}{suffix}</span>
           </div>
-        );
-      };
+          <div className="flex items-center gap-3">
+            <span className="w-10 text-[10px] font-bold text-emerald-500">AARON</span>
+            <div className="flex-1 h-3 bg-zinc-900 rounded-full border border-zinc-800 overflow-hidden"><div className="h-full bg-emerald-500 rounded-full transition-all duration-1000" style={{ width: `${aaronVal}%` }} /></div>
+            <span className="w-8 text-[10px] font-mono font-bold text-right">{aaronVal}{suffix}</span>
+          </div>
+        </div>
+      );
 
       return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-6">
-          <div className="flex justify-between items-end">
-            <div>
-              <h2 className="text-2xl font-black italic uppercase text-white mb-1">Head to Head</h2>
-              <p className="text-zinc-500 text-sm">Men lie, numbers don't.</p>
-            </div>
-            <IconTrophy className="text-yellow-500 w-8 h-8 opacity-50" />
-          </div>
-
+          <h2 className="text-2xl font-black italic uppercase text-white">Shred Analytics</h2>
           <div className="grid grid-cols-2 gap-3">
-             {users.map(u => {
-               const prof = profiles[u];
-               const color = u === 'Jordan' ? 'text-blue-500' : 'text-emerald-500';
-               return (
-                 <div key={u} className="bg-zinc-900 p-4 rounded-2xl border border-zinc-800">
-                    <div className={`text-xs font-bold uppercase tracking-widest mb-2 ${color}`}>{u}'s Goal Weight</div>
-                    <div className="text-3xl font-black text-white">{prof?.goalWeight || '--'} <span className="text-sm text-zinc-500 font-bold">kg</span></div>
-                    {prof?.currentWeight && (
-                      <div className="text-xs text-zinc-400 mt-1">Current: {prof.currentWeight}kg</div>
-                    )}
-                 </div>
-               );
-             })}
+            {users.map(u => (
+              <div key={u} className="bg-zinc-900 border border-zinc-800 p-5 rounded-3xl text-center relative overflow-hidden">
+                <div className={`absolute top-0 left-0 w-full h-1 ${u === 'Jordan' ? 'bg-blue-500' : 'bg-emerald-500'}`} />
+                <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block mb-2">{u}'s Readiness</span>
+                <div className="text-5xl font-black text-white italic">{stats[u].readiness}</div>
+                <div className="text-[10px] font-bold text-orange-500 mt-2">Turkey Score / 100</div>
+              </div>
+            ))}
           </div>
-
-          {(profiles['Jordan']?.motivation || profiles['Aaron']?.motivation) && (
-            <div className="bg-zinc-900 p-4 rounded-2xl border border-zinc-800 space-y-3">
-               {users.map(u => profiles[u]?.motivation && (
-                 <div key={u} className="text-sm">
-                   <span className={`font-bold ${u === 'Jordan' ? 'text-blue-500' : 'text-emerald-500'}`}>{u}:</span>
-                   <span className="text-zinc-300 italic ml-2">"{profiles[u].motivation}"</span>
-                 </div>
-               ))}
-            </div>
-          )}
-
-          <div className="bg-zinc-950 p-5 rounded-3xl border border-zinc-800 shadow-xl">
-            {renderBar('workouts')}
-            <div className="h-px bg-zinc-800 my-6"></div>
-            {renderBar('bench')}
-            {renderBar('squat')}
-            {renderBar('deadlift')}
+          <div className="bg-zinc-900 p-6 rounded-3xl border border-zinc-800">
+             <h3 className="text-xs font-black uppercase text-zinc-300 mb-6">Volume Trajectory</h3>
+             <div className="h-48 w-full"><canvas id="volumeChart"></canvas></div>
+          </div>
+          <div className="bg-zinc-900 p-6 rounded-3xl border border-zinc-800">
+             {renderBar("Consistency %", stats.Jordan.consistency, stats.Aaron.consistency, "%")}
+             {renderBar("Recent PBs", Math.min(stats.Jordan.pbs * 10, 100), Math.min(stats.Aaron.pbs * 10, 100), "")}
+             {renderBar("Diet Streak", Math.min(stats.Jordan.streak * 10, 100), Math.min(stats.Aaron.streak * 10, 100), "d")}
           </div>
         </div>
       );
@@ -1311,24 +577,18 @@
 
     function NavBar({ activeTab, setActiveTab }) {
       const tabs = [
-        { id: 'hub', icon: <IconActivity className="w-6 h-6" />, label: 'Hub' },
-        { id: 'train', icon: <IconPlus className="w-6 h-6" />, label: 'Train' },
-        { id: 'diet', icon: <IconUtensils className="w-6 h-6" />, label: 'Diet' },
-        { id: 'history', icon: <IconCalendar className="w-6 h-6" />, label: 'History' },
-        { id: 'vs', icon: <IconFlame className="w-6 h-6" />, label: 'VS Mode' },
-        { id: 'profile', icon: <IconUser className="w-6 h-6" />, label: 'Profile' },
+        { id: 'hub', icon: <IconActivity size={24} />, label: 'Hub' },
+        { id: 'train', icon: <IconPlus size={24} />, label: 'Train' },
+        { id: 'diet', icon: <IconUtensils size={24} />, label: 'Diet' },
+        { id: 'history', icon: <IconCalendar size={24} />, label: 'Log' },
+        { id: 'vs', icon: <IconFlame size={24} />, label: 'VS' },
+        { id: 'profile', icon: <IconUser size={24} />, label: 'Me' },
       ];
-
       return (
-        <nav className="fixed bottom-0 w-full max-w-md left-1/2 -translate-x-1/2 bg-zinc-950/90 backdrop-blur-xl border-t border-zinc-800/50 flex justify-around p-3 pb-safe z-50 shadow-[0_-10px_40px_rgba(0,0,0,0.5)]">
+        <nav className="fixed bottom-0 w-full max-w-md left-1/2 -translate-x-1/2 bg-zinc-950/90 backdrop-blur-xl border-t border-zinc-800/50 flex justify-around p-3 pb-safe z-50">
           {tabs.map(tab => (
-            <button 
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex flex-col items-center gap-1 p-1 rounded-xl transition-all ${activeTab === tab.id ? 'text-orange-500 scale-110' : 'text-zinc-500 hover:text-zinc-300'}`}
-            >
-              {tab.icon}
-              <span className="text-[8px] font-bold uppercase tracking-wider">{tab.label}</span>
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex flex-col items-center gap-1 p-1 rounded-xl transition-all ${activeTab === tab.id ? 'text-orange-500 scale-110' : 'text-zinc-500 hover:text-zinc-300'}`}>
+              {tab.icon} <span className="text-[8px] font-bold uppercase">{tab.label}</span>
             </button>
           ))}
         </nav>
@@ -1339,7 +599,6 @@
       const [authUser, setAuthUser] = useState(null);
       const [localUser, setLocalUser] = useState(localStorage.getItem('ts_user') || null);
       const [activeTab, setActiveTab] = useState('hub');
-      
       const [workouts, setWorkouts] = useState([]);
       const [habits, setHabits] = useState([]);
       const [profiles, setProfiles] = useState({});
@@ -1348,92 +607,39 @@
       const [loading, setLoading] = useState(true);
 
       useEffect(() => {
-        const initAuth = async () => {
-          try {
-            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-              await signInWithCustomToken(auth, __initial_auth_token);
-            } else {
-              await signInAnonymously(auth);
-            }
-          } catch (error) {
-            console.error("Auth error:", error);
+        onAuthStateChanged(auth, async (u) => {
+          if (!u) {
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token);
+            else await signInAnonymously(auth);
           }
-        };
-        initAuth();
-        const unsub = onAuthStateChanged(auth, (user) => setAuthUser(user));
-        
-        fetch(DB_URL)
-          .then(res => res.json())
-          .then(data => setExerciseDB(data))
-          .catch(err => console.error("Failed to fetch exercise DB:", err));
-
-        return () => unsub();
+          setAuthUser(auth.currentUser);
+        });
+        fetch(DB_URL).then(res => res.json()).then(setExerciseDB).catch(e => {});
       }, []);
 
       useEffect(() => {
         if (!authUser) return;
-
-        const wQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'workouts'));
-        const hQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'habits'));
-        const pQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'profiles'));
-        const cQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'custom_exercises'));
-
-        const unsubWorkouts = onSnapshot(wQuery, (snap) => {
-          setWorkouts(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        }, (err) => console.error(err));
-
-        const unsubHabits = onSnapshot(hQuery, (snap) => {
-          setHabits(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        }, (err) => console.error(err));
-
-        const unsubProfiles = onSnapshot(pQuery, (snap) => {
-          const profs = {};
-          snap.docs.forEach(doc => { profs[doc.id] = doc.data(); });
-          setProfiles(profs);
-          setLoading(false);
-        }, (err) => {
-          console.error(err);
-          setLoading(false);
-        });
-
-        const unsubCustom = onSnapshot(cQuery, (snap) => {
-          setCustomExercises(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        }, (err) => console.error(err));
-
-        return () => { unsubWorkouts(); unsubHabits(); unsubProfiles(); unsubCustom(); };
+        const unsubW = onSnapshot(query(collection(db, 'artifacts', appId, 'public', 'data', 'workouts')), s => setWorkouts(s.docs.map(d => ({id:d.id, ...d.data()}))));
+        const unsubH = onSnapshot(query(collection(db, 'artifacts', appId, 'public', 'data', 'habits')), s => setHabits(s.docs.map(d => ({id:d.id, ...d.data()}))));
+        const unsubP = onSnapshot(query(collection(db, 'artifacts', appId, 'public', 'data', 'profiles')), s => { const p={}; s.docs.forEach(d => p[d.id]=d.data()); setProfiles(p); setLoading(false); });
+        const unsubC = onSnapshot(query(collection(db, 'artifacts', appId, 'public', 'data', 'custom_exercises')), s => setCustomExercises(s.docs.map(d => ({id:d.id, ...d.data()}))));
+        return () => { unsubW(); unsubH(); unsubP(); unsubC(); };
       }, [authUser]);
 
-      const selectUser = (name) => {
-        localStorage.setItem('ts_user', name);
-        setLocalUser(name);
-      };
-
-      const handleLogout = () => {
-        localStorage.removeItem('ts_user');
-        setLocalUser(null);
-      };
-
-      if (!localUser) return <WelcomeScreen onSelect={selectUser} />;
-      
-      if (loading) return (
-        <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-          <IconLoader className="text-orange-500 w-12 h-12" />
-        </div>
-      );
+      if (!localUser) return <WelcomeScreen onSelect={(u) => { localStorage.setItem('ts_user', u); setLocalUser(u); }} />;
+      if (loading) return <div className="min-h-screen bg-zinc-950 flex items-center justify-center"><IconLoader className="text-orange-500 w-12 h-12" /></div>;
 
       return (
-        <div className="min-h-screen bg-zinc-950 text-slate-50 font-sans pb-24 selection:bg-orange-500/30">
+        <div className="min-h-screen bg-zinc-950 text-slate-50 font-sans pb-24">
           <Header localUser={localUser} />
-          
           <main className="p-4 max-w-md mx-auto">
             {activeTab === 'hub' && <Feed workouts={workouts} habits={habits} localUser={localUser} />}
             {activeTab === 'train' && <Train workouts={workouts} localUser={localUser} exerciseDB={exerciseDB} customExercises={customExercises} />}
             {activeTab === 'diet' && <Diet habits={habits} localUser={localUser} />}
             {activeTab === 'history' && <History workouts={workouts} habits={habits} profiles={profiles} localUser={localUser} />}
             {activeTab === 'vs' && <Stats workouts={workouts} habits={habits} profiles={profiles} />}
-            {activeTab === 'profile' && <Profile profiles={profiles} localUser={localUser} onLogout={handleLogout} />}
+            {activeTab === 'profile' && <Profile profiles={profiles} localUser={localUser} onLogout={() => { localStorage.removeItem('ts_user'); setLocalUser(null); }} />}
           </main>
-
           <NavBar activeTab={activeTab} setActiveTab={setActiveTab} />
         </div>
       );
