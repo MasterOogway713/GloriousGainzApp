@@ -120,100 +120,6 @@
       return null;
     };
 
-    function App() {
-      const [authUser, setAuthUser] = useState(null);
-      const [localUser, setLocalUser] = useState(localStorage.getItem('ts_user') || null);
-      const [activeTab, setActiveTab] = useState('hub');
-      
-      const [workouts, setWorkouts] = useState([]);
-      const [habits, setHabits] = useState([]);
-      const [profiles, setProfiles] = useState({});
-      const [exerciseDB, setExerciseDB] = useState([]);
-      const [loading, setLoading] = useState(true);
-
-      useEffect(() => {
-        const initAuth = async () => {
-          try {
-            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-              await signInWithCustomToken(auth, __initial_auth_token);
-            } else {
-              await signInAnonymously(auth);
-            }
-          } catch (error) {
-            console.error("Auth error:", error);
-          }
-        };
-        initAuth();
-        const unsub = onAuthStateChanged(auth, (user) => setAuthUser(user));
-        
-        fetch(DB_URL)
-          .then(res => res.json())
-          .then(data => setExerciseDB(data))
-          .catch(err => console.error("Failed to fetch exercise DB:", err));
-
-        return () => unsub();
-      }, []);
-
-      useEffect(() => {
-        if (!authUser) return;
-
-        // Path structure depends on if it's hosted in the previewer or on GitHub pages
-        const wQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'workouts'));
-        const hQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'habits'));
-        const pQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'profiles'));
-
-        const unsubWorkouts = onSnapshot(wQuery, (snap) => {
-          setWorkouts(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        }, (err) => console.error(err));
-
-        const unsubHabits = onSnapshot(hQuery, (snap) => {
-          setHabits(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        }, (err) => console.error(err));
-
-        const unsubProfiles = onSnapshot(pQuery, (snap) => {
-          const profs = {};
-          snap.docs.forEach(doc => { profs[doc.id] = doc.data(); });
-          setProfiles(profs);
-          setLoading(false);
-        }, (err) => {
-          console.error(err);
-          setLoading(false);
-        });
-
-        return () => { unsubWorkouts(); unsubHabits(); unsubProfiles(); };
-      }, [authUser]);
-
-      const selectUser = (name) => {
-        localStorage.setItem('ts_user', name);
-        setLocalUser(name);
-      };
-
-      if (!localUser) return <WelcomeScreen onSelect={selectUser} />;
-      
-      if (loading) return (
-        <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
-          <div className="animate-spin text-orange-500"><IconActivity size={48} /></div>
-        </div>
-      );
-
-      return (
-        <div className="min-h-screen bg-zinc-950 text-slate-50 font-sans pb-24 selection:bg-orange-500/30">
-          <Header localUser={localUser} />
-          
-          <main className="p-4 max-w-md mx-auto">
-            {activeTab === 'hub' && <Feed workouts={workouts} habits={habits} localUser={localUser} />}
-            {activeTab === 'train' && <Train workouts={workouts} localUser={localUser} exerciseDB={exerciseDB} />}
-            {activeTab === 'diet' && <Diet habits={habits} localUser={localUser} />}
-            {activeTab === 'history' && <History workouts={workouts} localUser={localUser} />}
-            {activeTab === 'vs' && <Stats workouts={workouts} habits={habits} profiles={profiles} />}
-            {activeTab === 'profile' && <Profile profiles={profiles} localUser={localUser} />}
-          </main>
-
-          <NavBar activeTab={activeTab} setActiveTab={setActiveTab} />
-        </div>
-      );
-    }
-
     // --- SCREENS & COMPONENTS ---
     function WelcomeScreen({ onSelect }) {
       return (
@@ -436,7 +342,7 @@
       );
     }
 
-    function Train({ workouts, localUser, exerciseDB }) {
+    function Train({ workouts, localUser, exerciseDB, customExercises }) {
       const [activeTemplate, setActiveTemplate] = useState("Chest/Tris");
       const [exercise, setExercise] = useState(TEMPLATES["Chest/Tris"][0]);
       const [weight, setWeight] = useState('');
@@ -533,6 +439,7 @@
             date: todayStr,
             timestamp: Date.now()
           });
+          setWeight('');
           setNote('');
           setRestTime(90);
         } catch (err) {
@@ -545,6 +452,19 @@
         setExercise(exName);
         setShowSearchModal(false);
       };
+
+      // DYNAMIC SUGGESTIONS
+      const suggestedExercises = useMemo(() => {
+        let baseList = activeTemplate === 'AI Custom ✨' && customAiTemplate ? customAiTemplate : (TEMPLATES[activeTemplate] || []);
+        
+        const getLastLoggedTime = (exName) => {
+            const matches = workouts.filter(w => w.user === localUser && w.exercise === exName);
+            if (matches.length === 0) return 0;
+            return Math.max(...matches.map(w => w.timestamp));
+        };
+
+        return [...baseList].sort((a, b) => getLastLoggedTime(b) - getLastLoggedTime(a));
+      }, [activeTemplate, customAiTemplate, workouts, localUser]);
 
       return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -560,12 +480,6 @@
 
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-2xl font-black italic uppercase text-white">Log Set</h2>
-            <button 
-              onClick={() => setShowSearchModal(true)}
-              className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 hover:border-orange-500 text-xs font-bold px-3 py-1.5 rounded-full transition-colors text-orange-500"
-            >
-              <IconSearch className="w-4 h-4" /> Exercise DB
-            </button>
           </div>
 
           <div className="bg-gradient-to-br from-zinc-900 to-zinc-950 p-5 rounded-3xl border border-zinc-800 shadow-xl mb-8 relative overflow-hidden">
@@ -633,18 +547,29 @@
 
               {/* Exercise Details */}
               <div>
-                <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-1">Exercise</label>
-                <input 
-                  type="text" 
-                  value={exercise} 
-                  onChange={e => setExercise(e.target.value)}
-                  placeholder="E.g. Bench Press"
-                  className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white font-bold outline-none focus:border-orange-500 transition-colors"
-                />
+                <div className="flex justify-between items-end mb-1">
+                  <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block">Exercise</label>
+                  <button 
+                    type="button"
+                    onClick={() => setShowSearchModal(true)}
+                    className="flex items-center gap-1 text-[10px] font-bold text-orange-500 bg-orange-500/10 px-2 py-1 rounded hover:bg-orange-500/20 transition-colors"
+                  >
+                    <IconSearch size={12} /> Database
+                  </button>
+                </div>
+                
+                <button 
+                  type="button"
+                  onClick={() => setShowSearchModal(true)}
+                  className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white font-bold outline-none focus:border-orange-500 transition-colors text-left flex justify-between items-center"
+                >
+                  <span>{exercise || "Select Exercise..."}</span>
+                  <IconSearch size={16} className="text-zinc-600" />
+                </button>
                 
                 {/* Quick Suggestions */}
                 <div className="flex flex-wrap gap-2 mt-2">
-                   {(activeTemplate === 'AI Custom ✨' && customAiTemplate ? customAiTemplate : (TEMPLATES[activeTemplate] || [])).map(ex => (
+                   {suggestedExercises.map(ex => (
                      <button type="button" key={ex} onClick={() => setExercise(ex)} className={`text-[10px] px-2 py-1 rounded transition-colors ${exercise === ex ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30' : 'bg-zinc-800 text-zinc-400 border border-transparent hover:bg-zinc-700'}`}>{ex}</button>
                    ))}
                 </div>
@@ -668,7 +593,7 @@
                     className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white font-mono font-bold text-lg outline-none focus:border-orange-500 transition-colors text-center"
                   />
                 </div>
-                <div className="flex-[1.5]">
+                <div className="flex-[1.5] min-w-0">
                   <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest block mb-1">Target Reps</label>
                   <div className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar">
                     {REP_TARGETS.map(r => (
@@ -744,20 +669,40 @@
               onClose={() => setShowSearchModal(false)} 
               onSelect={handleSelectFromDB} 
               exerciseDB={exerciseDB} 
+              customExercises={customExercises}
             />
           )}
         </div>
       );
     }
 
-    function ExerciseSearchModal({ onClose, onSelect, exerciseDB }) {
+    function ExerciseSearchModal({ onClose, onSelect, exerciseDB, customExercises }) {
       const [query, setQuery] = useState('');
       const [selectedEx, setSelectedEx] = useState(null);
+      const [isAdding, setIsAdding] = useState(false);
+
+      const allExercises = useMemo(() => {
+        const customMapped = (customExercises || []).map(c => ({ name: c.name, category: "Custom", equipment: "Any", isCustom: true }));
+        return [...customMapped, ...exerciseDB];
+      }, [exerciseDB, customExercises]);
 
       const results = useMemo(() => {
-        if (!query) return exerciseDB.slice(0, 20);
-        return exerciseDB.filter(ex => ex.name.toLowerCase().includes(query.toLowerCase())).slice(0, 30);
-      }, [query, exerciseDB]);
+        if (!query) return allExercises.slice(0, 20);
+        return allExercises.filter(ex => ex.name.toLowerCase().includes(query.toLowerCase())).slice(0, 30);
+      }, [query, allExercises]);
+
+      const handleAddCustom = async () => {
+        if (!query.trim()) return;
+        setIsAdding(true);
+        try {
+          const newEx = { name: query.trim(), category: "Custom", timestamp: Date.now() };
+          await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'custom_exercises'), newEx);
+          onSelect(newEx.name);
+        } catch (e) {
+          console.error("Error adding custom exercise:", e);
+        }
+        setIsAdding(false);
+      };
 
       return (
         <div className="fixed inset-0 bg-black/95 z-[60] flex flex-col items-center justify-start p-4 backdrop-blur-sm overflow-hidden animate-in fade-in">
@@ -786,10 +731,20 @@
                  
                  <div className="flex-1 overflow-y-auto p-2 space-y-1">
                    {results.length === 0 ? (
-                     <div className="text-center text-zinc-600 py-10 text-sm">No exercises found.</div>
+                     <div className="text-center p-6 flex flex-col items-center justify-center">
+                       <p className="text-zinc-400 text-sm mb-4">No exercises found matching "{query}".</p>
+                       <button 
+                         onClick={handleAddCustom} 
+                         disabled={isAdding || !query.trim()} 
+                         className="bg-zinc-800 border border-zinc-700 hover:border-orange-500 text-white font-bold px-4 py-3 rounded-xl transition-colors w-full flex justify-center items-center gap-2"
+                       >
+                         {isAdding ? <IconLoader size={16} /> : <IconPlus size={16} />} 
+                         Add "{query}" as Custom
+                       </button>
+                     </div>
                    ) : (
                      results.map(ex => {
-                       const imgPath = ex.images && ex.images.length > 0 ? `${IMG_BASE_URL}${ex.name.replace(/ /g, '_').replace(/\//g, '_')}/0.jpg` : null;
+                       const imgPath = !ex.isCustom && ex.images && ex.images.length > 0 ? `${IMG_BASE_URL}${ex.name.replace(/ /g, '_').replace(/\//g, '_')}/0.jpg` : null;
                        return (
                          <button key={ex.name} onClick={() => setSelectedEx(ex)} className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-900 transition text-left">
                            {imgPath ? (
@@ -927,7 +882,8 @@
       );
     }
 
-    function History({ workouts, localUser }) {
+    function History({ workouts, habits, profiles, localUser }) {
+      const [viewUser, setViewUser] = useState(localUser);
       const [currentDate, setCurrentDate] = useState(new Date());
 
       const year = currentDate.getFullYear();
@@ -941,25 +897,107 @@
 
       const monthName = currentDate.toLocaleString('default', { month: 'long' });
 
-      // Calculate unique workout days for the local user in the selected month
-      const workoutDays = useMemo(() => {
-        const set = new Set();
-        workouts.forEach(w => {
-           if (w.user === localUser) {
-              const d = new Date(w.date);
-              if (d.getFullYear() === year && d.getMonth() === month) {
-                 set.add(d.getDate());
-              }
-           }
+      // Local Date formatter YYYY-MM-DD
+      const fmt = (dateObj) => {
+        return `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+      };
+
+      // Weekly Workout target calc (Monday -> Sunday)
+      const targetWorkouts = profiles[viewUser]?.targetWorkouts || 4;
+      const weekWorkoutsCount = useMemo(() => {
+        const now = new Date();
+        const currentDay = now.getDay();
+        const distanceToMonday = (currentDay === 0 ? 6 : currentDay - 1);
+        const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - distanceToMonday);
+        monday.setHours(0,0,0,0);
+
+        const currentWeekWorkouts = workouts.filter(w => {
+            if (w.user !== viewUser) return false;
+            const [y, m, d] = w.date.split('-');
+            const wDate = new Date(y, m - 1, d);
+            return wDate >= monday;
         });
-        return set;
-      }, [workouts, localUser, year, month]);
+        return new Set(currentWeekWorkouts.map(w => w.date)).size;
+      }, [workouts, viewUser]);
+
+      // Perfect Diet Streak calc
+      const streak = useMemo(() => {
+        const perfDays = new Set(
+            habits
+              .filter(h => h.user === viewUser && h.calories && h.protein && h.water && h.noAlcohol)
+              .map(h => h.date)
+        );
+        let count = 0;
+        let d = new Date();
+        let dStr = fmt(d);
+        
+        // If today is perfect, count it. Otherwise, check if today is actively failed.
+        if (perfDays.has(dStr)) {
+            count++;
+        } else {
+            const todayLogged = habits.some(h => h.user === viewUser && h.date === dStr);
+            if (todayLogged) return 0; // Logged today but not perfect = broken streak
+        }
+        
+        // Count backwards
+        d.setDate(d.getDate() - 1);
+        while (true) {
+            dStr = fmt(d);
+            if (perfDays.has(dStr)) {
+                count++;
+                d.setDate(d.getDate() - 1);
+            } else {
+                break;
+            }
+        }
+        return count;
+      }, [habits, viewUser]);
+
+      // Calendar Dots calc
+      const monthData = useMemo(() => {
+        const wDays = new Set();
+        const dDays = new Set();
+        workouts.forEach(w => { if(w.user === viewUser) wDays.add(w.date) });
+        habits.forEach(h => {
+           if(h.user === viewUser && h.calories && h.protein && h.water && h.noAlcohol) dDays.add(h.date);
+        });
+        return { wDays, dDays };
+      }, [workouts, habits, viewUser]);
+
+      // UI Theme per user
+      const theme = viewUser === 'Jordan' ? {
+        bg: 'bg-blue-500', btnBg: 'bg-blue-600', text: 'text-blue-500', border: 'border-blue-400', shadow: 'shadow-[0_0_15px_rgba(59,130,246,0.3)]', line: 'bg-blue-500/20'
+      } : {
+        bg: 'bg-emerald-500', btnBg: 'bg-emerald-600', text: 'text-emerald-500', border: 'border-emerald-400', shadow: 'shadow-[0_0_15px_rgba(16,185,129,0.3)]', line: 'bg-emerald-500/20'
+      };
 
       return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
           <div className="mb-6">
-            <h2 className="text-2xl font-black italic uppercase text-white mb-1">Consistency Tracker</h2>
-            <p className="text-zinc-500 text-sm">Every day counts towards Turkey '26.</p>
+            <h2 className="text-2xl font-black italic uppercase text-white mb-1">Tracker</h2>
+            <p className="text-zinc-500 text-sm">Stay on target for Turkey.</p>
+          </div>
+
+          {/* User Toggle */}
+          <div className="flex bg-zinc-900 rounded-xl p-1 mb-6 border border-zinc-800">
+            <button onClick={() => setViewUser('Jordan')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewUser === 'Jordan' ? 'bg-blue-600 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}>Jordan</button>
+            <button onClick={() => setViewUser('Aaron')} className={`flex-1 py-2 rounded-lg text-sm font-bold transition-all ${viewUser === 'Aaron' ? 'bg-emerald-600 text-white shadow-md' : 'text-zinc-500 hover:text-zinc-300'}`}>Aaron</button>
+          </div>
+
+          {/* Quick Stats */}
+          <div className="grid grid-cols-2 gap-3 mb-6">
+            <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-2xl flex flex-col items-center justify-center relative overflow-hidden">
+               <div className={`absolute top-0 w-full h-1 ${theme.line}`}></div>
+               <IconDumbbell className={`${theme.text} w-6 h-6 mb-2`} />
+               <div className="text-2xl font-black text-white">{weekWorkoutsCount} <span className="text-sm text-zinc-500">/ {targetWorkouts}</span></div>
+               <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mt-1">This Week</div>
+            </div>
+            <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-2xl flex flex-col items-center justify-center relative overflow-hidden">
+               <div className={`absolute top-0 w-full h-1 ${theme.line}`}></div>
+               <IconFlame className={`${theme.text} w-6 h-6 mb-2`} />
+               <div className="text-2xl font-black text-white">{streak} <span className="text-sm text-zinc-500">days</span></div>
+               <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mt-1">Diet Streak</div>
+            </div>
           </div>
 
           <div className="bg-zinc-950 p-5 rounded-3xl border border-zinc-800 shadow-xl">
@@ -976,23 +1014,29 @@
              <div className="grid grid-cols-7 gap-2">
                 {blanks.map((_, i) => <div key={`blank-${i}`} className="aspect-square" />)}
                 {days.map(d => {
-                   const isWorkout = workoutDays.has(d);
-                   const isToday = new Date().toDateString() === new Date(year, month, d).toDateString();
+                   const dStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                   const isWorkout = monthData.wDays.has(dStr);
+                   const isPerfectDiet = monthData.dDays.has(dStr);
+                   const isToday = fmt(new Date()) === dStr;
+
                    return (
-                     <div key={d} className={`aspect-square rounded-xl flex items-center justify-center font-bold text-sm border transition-colors
-                       ${isWorkout ? 'bg-orange-500 text-black border-orange-400 shadow-[0_0_15px_rgba(249,115,22,0.3)]' : 'bg-zinc-900 text-zinc-500 border-zinc-800'}
+                     <div key={d} className={`relative aspect-square rounded-xl flex items-center justify-center font-bold text-sm border transition-colors
+                       ${isWorkout ? `${theme.bg} text-black ${theme.border} ${theme.shadow}` : 'bg-zinc-900 text-zinc-500 border-zinc-800'}
                        ${isToday && !isWorkout ? 'ring-2 ring-white text-white' : ''}
                        ${isToday && isWorkout ? 'ring-2 ring-white text-black' : ''}
                      `}>
                        {d}
+                       {isPerfectDiet && (
+                         <div className={`absolute bottom-1 right-1 w-2 h-2 ${isWorkout ? 'bg-white' : 'bg-orange-500'} rounded-full shadow-md`}></div>
+                       )}
                      </div>
                    )
                 })}
              </div>
 
-             <div className="mt-6 pt-6 border-t border-zinc-800 flex justify-between items-center">
-                <div className="text-zinc-500 text-xs font-bold uppercase tracking-widest">Total This Month</div>
-                <div className="text-2xl font-black text-orange-500">{workoutDays.size} <span className="text-sm text-zinc-500 font-bold">days</span></div>
+             <div className="flex justify-center gap-4 mt-6 text-[10px] font-bold uppercase text-zinc-500">
+               <div className="flex items-center gap-1"><div className={`w-3 h-3 ${theme.bg} rounded flex-shrink-0`}></div> Workout</div>
+               <div className="flex items-center gap-1"><div className="w-2 h-2 bg-orange-500 rounded-full flex-shrink-0"></div> Perfect Diet</div>
              </div>
           </div>
         </div>
@@ -1206,6 +1250,105 @@
             </button>
           ))}
         </nav>
+      );
+    }
+
+    function App() {
+      const [authUser, setAuthUser] = useState(null);
+      const [localUser, setLocalUser] = useState(localStorage.getItem('ts_user') || null);
+      const [activeTab, setActiveTab] = useState('hub');
+      
+      const [workouts, setWorkouts] = useState([]);
+      const [habits, setHabits] = useState([]);
+      const [profiles, setProfiles] = useState({});
+      const [exerciseDB, setExerciseDB] = useState([]);
+      const [customExercises, setCustomExercises] = useState([]);
+      const [loading, setLoading] = useState(true);
+
+      useEffect(() => {
+        const initAuth = async () => {
+          try {
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+              await signInWithCustomToken(auth, __initial_auth_token);
+            } else {
+              await signInAnonymously(auth);
+            }
+          } catch (error) {
+            console.error("Auth error:", error);
+          }
+        };
+        initAuth();
+        const unsub = onAuthStateChanged(auth, (user) => setAuthUser(user));
+        
+        fetch(DB_URL)
+          .then(res => res.json())
+          .then(data => setExerciseDB(data))
+          .catch(err => console.error("Failed to fetch exercise DB:", err));
+
+        return () => unsub();
+      }, []);
+
+      useEffect(() => {
+        if (!authUser) return;
+
+        const wQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'workouts'));
+        const hQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'habits'));
+        const pQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'profiles'));
+        const cQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'custom_exercises'));
+
+        const unsubWorkouts = onSnapshot(wQuery, (snap) => {
+          setWorkouts(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        }, (err) => console.error(err));
+
+        const unsubHabits = onSnapshot(hQuery, (snap) => {
+          setHabits(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        }, (err) => console.error(err));
+
+        const unsubProfiles = onSnapshot(pQuery, (snap) => {
+          const profs = {};
+          snap.docs.forEach(doc => { profs[doc.id] = doc.data(); });
+          setProfiles(profs);
+          setLoading(false);
+        }, (err) => {
+          console.error(err);
+          setLoading(false);
+        });
+
+        const unsubCustom = onSnapshot(cQuery, (snap) => {
+          setCustomExercises(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        }, (err) => console.error(err));
+
+        return () => { unsubWorkouts(); unsubHabits(); unsubProfiles(); unsubCustom(); };
+      }, [authUser]);
+
+      const selectUser = (name) => {
+        localStorage.setItem('ts_user', name);
+        setLocalUser(name);
+      };
+
+      if (!localUser) return <WelcomeScreen onSelect={selectUser} />;
+      
+      if (loading) return (
+        <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+          <IconLoader className="text-orange-500 w-12 h-12" />
+        </div>
+      );
+
+      return (
+        <div className="min-h-screen bg-zinc-950 text-slate-50 font-sans pb-24 selection:bg-orange-500/30">
+          <Header localUser={localUser} />
+          
+          <main className="p-4 max-w-md mx-auto">
+            {activeTab === 'hub' && <Feed workouts={workouts} habits={habits} localUser={localUser} />}
+            {activeTab === 'train' && <Train workouts={workouts} localUser={localUser} exerciseDB={exerciseDB} customExercises={customExercises} />}
+            {activeTab === 'diet' && <Diet habits={habits} localUser={localUser} />}
+            {activeTab === 'history' && <History workouts={workouts} habits={habits} profiles={profiles} localUser={localUser} />}
+            {activeTab === 'vs' && <Stats workouts={workouts} habits={habits} profiles={profiles} />}
+            {activeTab === 'profile' && <Profile profiles={profiles} localUser={localUser} />}
+          </main>
+
+          <NavBar activeTab={activeTab} setActiveTab={setActiveTab} />
+        </div>
       );
     }
 
