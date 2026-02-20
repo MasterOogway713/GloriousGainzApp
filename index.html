@@ -1121,7 +1121,7 @@
       );
     }
 
-    function Profile({ profiles, localUser }) {
+    function Profile({ profiles, localUser, onLogout }) {
       const [isSaving, setIsSaving] = useState(false);
       const userProfile = profiles[localUser] || { currentWeight: '', goalWeight: '', targetWorkouts: '4', motivation: '' };
       
@@ -1176,6 +1176,10 @@
 
             <button disabled={isSaving} className="w-full bg-orange-500 text-black font-black uppercase tracking-widest py-4 rounded-xl active:scale-95 transition-all">
               {isSaving ? 'Saving...' : 'Lock It In'}
+            </button>
+            
+            <button type="button" onClick={onLogout} className="w-full bg-zinc-900 border border-zinc-800 text-zinc-500 font-bold uppercase tracking-widest py-4 rounded-xl active:scale-95 transition-all mt-4 hover:bg-zinc-800 hover:text-white">
+              Switch User
             </button>
           </form>
         </div>
@@ -1404,6 +1408,11 @@
         setLocalUser(name);
       };
 
+      const handleLogout = () => {
+        localStorage.removeItem('ts_user');
+        setLocalUser(null);
+      };
+
       if (!localUser) return <WelcomeScreen onSelect={selectUser} />;
       
       if (loading) return (
@@ -1422,7 +1431,7 @@
             {activeTab === 'diet' && <Diet habits={habits} localUser={localUser} />}
             {activeTab === 'history' && <History workouts={workouts} habits={habits} profiles={profiles} localUser={localUser} />}
             {activeTab === 'vs' && <Stats workouts={workouts} habits={habits} profiles={profiles} />}
-            {activeTab === 'profile' && <Profile profiles={profiles} localUser={localUser} />}
+            {activeTab === 'profile' && <Profile profiles={profiles} localUser={localUser} onLogout={handleLogout} />}
           </main>
 
           <NavBar activeTab={activeTab} setActiveTab={setActiveTab} />
