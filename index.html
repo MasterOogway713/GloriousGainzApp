@@ -20,6 +20,17 @@
     .pb-safe { padding-bottom: env(safe-area-inset-bottom, 16px); }
     .hide-scrollbar::-webkit-scrollbar { display: none; }
     .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    
+    @keyframes scroll-whisper {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+    .whisper-scroll {
+      display: inline-block;
+      white-space: nowrap;
+      animation: scroll-whisper 30s linear infinite;
+      will-change: transform;
+    }
   </style>
 </head>
 <body>
@@ -122,31 +133,47 @@
 
     // --- SCREENS & COMPONENTS ---
     function WelcomeScreen({ onSelect }) {
+      // Repeat the string enough times so it loops smoothly off screen
+      const whisperText = "The glorious house of gains... ".repeat(30);
+
       return (
-        <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-6 text-center">
-          <div className="bg-orange-500/10 p-4 rounded-full mb-6 border border-orange-500/20">
-            <IconTrophy className="text-orange-500 w-12 h-12" />
-          </div>
-          <h1 className="text-4xl font-black italic tracking-tighter mb-2 uppercase text-white">
-            Turkey Shred <span className="text-orange-500">'26</span>
-          </h1>
-          <p className="text-zinc-400 mb-12">Who is grinding today?</p>
+        <div className="relative min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-6 text-center overflow-hidden">
           
-          <div className="flex gap-4 w-full max-w-sm">
-            <button 
-              onClick={() => onSelect('Jordan')}
-              className="flex-1 bg-zinc-900 border border-zinc-800 hover:border-orange-500 py-8 rounded-2xl font-bold text-xl text-white transition-all active:scale-95 flex flex-col items-center gap-2"
-            >
-              <div className="w-12 h-12 bg-blue-500/20 rounded-full flex items-center justify-center text-blue-500 text-2xl font-black">J</div>
-              Jordan
-            </button>
-            <button 
-              onClick={() => onSelect('Aaron')}
-              className="flex-1 bg-zinc-900 border border-zinc-800 hover:border-orange-500 py-8 rounded-2xl font-bold text-xl text-white transition-all active:scale-95 flex flex-col items-center gap-2"
-            >
-              <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center text-emerald-500 text-2xl font-black">A</div>
-              Aaron
-            </button>
+          {/* Background Whispers */}
+          <div className="absolute inset-0 z-0 pointer-events-none flex flex-col justify-around overflow-hidden opacity-[0.03] select-none">
+            <div className="whisper-scroll text-5xl font-black italic text-white">{whisperText}</div>
+            <div className="whisper-scroll text-7xl font-black italic text-white" style={{ animationDirection: 'reverse', animationDuration: '40s' }}>{whisperText}</div>
+            <div className="whisper-scroll text-4xl font-black italic text-white" style={{ animationDuration: '25s' }}>{whisperText}</div>
+            <div className="whisper-scroll text-8xl font-black italic text-white" style={{ animationDirection: 'reverse', animationDuration: '50s' }}>{whisperText}</div>
+            <div className="whisper-scroll text-6xl font-black italic text-white" style={{ animationDuration: '35s' }}>{whisperText}</div>
+          </div>
+
+          {/* Foreground Content */}
+          <div className="relative z-10 flex flex-col items-center w-full">
+            <div className="bg-orange-500/10 p-4 rounded-full mb-6 border border-orange-500/20 backdrop-blur-md">
+              <IconTrophy className="text-orange-500 w-12 h-12" />
+            </div>
+            <h1 className="text-4xl font-black italic tracking-tighter mb-2 uppercase text-white">
+              Turkey Shred <span className="text-orange-500">'26</span>
+            </h1>
+            <p className="text-zinc-400 mb-12">Who is grinding today?</p>
+            
+            <div className="flex gap-4 w-full max-w-sm">
+              <button 
+                onClick={() => onSelect('Jordan')}
+                className="flex-1 bg-zinc-900/80 backdrop-blur-sm border border-zinc-800 hover:border-orange-500 py-8 rounded-2xl font-bold text-xl text-white transition-all active:scale-95 flex flex-col items-center gap-2 shadow-2xl"
+              >
+                <div className="w-12 h-12 bg-blue-500/20 rounded-full flex items-center justify-center text-blue-500 text-2xl font-black border border-blue-500/30">J</div>
+                Jordan
+              </button>
+              <button 
+                onClick={() => onSelect('Aaron')}
+                className="flex-1 bg-zinc-900/80 backdrop-blur-sm border border-zinc-800 hover:border-orange-500 py-8 rounded-2xl font-bold text-xl text-white transition-all active:scale-95 flex flex-col items-center gap-2 shadow-2xl"
+              >
+                <div className="w-12 h-12 bg-emerald-500/20 rounded-full flex items-center justify-center text-emerald-500 text-2xl font-black border border-emerald-500/30">A</div>
+                Aaron
+              </button>
+            </div>
           </div>
         </div>
       );
@@ -197,7 +224,47 @@
           ...workouts.map(w => ({ ...w, type: 'workout' })),
           ...habits.map(h => ({ ...h, type: 'habit' }))
         ];
-        return evts.sort((a, b) => b.timestamp - a.timestamp);
+        
+        // Sort all descending
+        evts.sort((a, b) => b.timestamp - a.timestamp);
+
+        const groups = {};
+        const result = [];
+
+        evts.forEach(evt => {
+          if (evt.type === 'workout') {
+            // Group by User + Date + Exercise
+            const key = `workout-${evt.user}-${evt.date}-${evt.exercise}`;
+            if (!groups[key]) {
+              groups[key] = {
+                id: key,
+                primaryDocId: evt.id, // Save the latest doc ID for reactions
+                type: 'workoutGroup',
+                user: evt.user,
+                date: evt.date,
+                exercise: evt.exercise,
+                timestamp: evt.timestamp,
+                sets: [],
+                reactions: {}
+              };
+              result.push(groups[key]);
+            }
+            groups[key].sets.push(evt);
+            
+            // Merge reactions safely
+            if (evt.reactions) {
+               Object.keys(evt.reactions).forEach(usr => {
+                 if (!groups[key].reactions[usr]) {
+                   groups[key].reactions[usr] = evt.reactions[usr];
+                 }
+               });
+            }
+          } else {
+            result.push(evt);
+          }
+        });
+
+        return result;
       }, [workouts, habits]);
 
       const getTimeAgo = (ts) => {
@@ -210,8 +277,9 @@
       };
 
       const handleReact = async (evt, emoji) => {
-        const colName = evt.type === 'workout' ? 'workouts' : 'habits';
-        const ref = doc(db, 'artifacts', appId, 'public', 'data', colName, evt.id);
+        const colName = evt.type === 'workoutGroup' ? 'workouts' : 'habits';
+        const docId = evt.type === 'workoutGroup' ? evt.primaryDocId : evt.id;
+        const ref = doc(db, 'artifacts', appId, 'public', 'data', colName, docId);
         try {
           await updateDoc(ref, {
             [`reactions.${localUser}`]: emoji ? emoji : deleteField()
@@ -268,7 +336,7 @@
               const isMe = evt.user === localUser;
               const userColor = evt.user === 'Jordan' ? 'text-blue-500 bg-blue-500/10 border-blue-500/20' : 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20';
               
-              if (evt.type === 'workout') {
+              if (evt.type === 'workoutGroup') {
                 return (
                   <div key={evt.id} className={`p-4 rounded-2xl border ${isMe ? 'border-zinc-800 bg-zinc-900/50' : 'border-orange-500/30 bg-orange-500/5'} transition-all`}>
                     <div className="flex justify-between items-start mb-2">
@@ -277,24 +345,34 @@
                           {evt.user.charAt(0)}
                         </div>
                         <span className="font-bold text-sm">{evt.user}</span>
-                        <span className="text-xs text-zinc-500">logged a set</span>
+                        <span className="text-xs text-zinc-500">logged {evt.sets.length} set{evt.sets.length > 1 ? 's' : ''}</span>
                       </div>
                       <span className="text-[10px] font-bold text-zinc-500">{getTimeAgo(evt.timestamp)}</span>
                     </div>
                     
                     <div className="pl-8">
-                      <div className="flex items-end gap-2 mb-1">
+                      <div className="flex items-end gap-2 mb-2">
                         <span className="font-black text-lg text-white">{evt.exercise}</span>
                       </div>
-                      <div className="inline-flex items-center gap-2 bg-zinc-950 px-2 py-1 rounded border border-zinc-800 font-mono text-sm text-orange-400 font-bold">
-                        {evt.weight}kg <IconX className="w-3 h-3 text-zinc-600 inline" /> {evt.reps} reps
+                      
+                      <div className="space-y-2">
+                        {/* We reverse the sets array so Set 1 appears at the top */}
+                        {[...evt.sets].reverse().map((set, idx) => (
+                          <div key={set.id} className="flex flex-col gap-1">
+                            <div className="inline-flex items-center w-max gap-2 bg-zinc-950 px-2 py-1 rounded border border-zinc-800 font-mono text-sm text-orange-400 font-bold">
+                              <span className="text-zinc-600 text-xs font-sans mr-1">Set {idx + 1}</span>
+                              {set.weight}kg <IconX className="w-3 h-3 text-zinc-600 inline" /> {set.reps} reps
+                            </div>
+                            {set.note && (
+                              <div className="mt-1 text-sm text-zinc-400 border-l-2 border-zinc-700 pl-3 italic flex items-start gap-2">
+                                <IconMessageSquare className="w-3 h-3 mt-1 text-zinc-600 shrink-0" />
+                                <span>"{set.note}"</span>
+                              </div>
+                            )}
+                          </div>
+                        ))}
                       </div>
-                      {evt.note && (
-                        <div className="mt-3 text-sm text-zinc-400 border-l-2 border-zinc-700 pl-3 italic flex items-start gap-2">
-                          <IconMessageSquare className="w-3 h-3 mt-1 text-zinc-600" />
-                          "{evt.note}"
-                        </div>
-                      )}
+
                       {renderReactions(evt)}
                     </div>
                   </div>
