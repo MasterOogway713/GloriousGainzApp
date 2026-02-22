@@ -128,6 +128,7 @@
     const IconBan = ({size=24, className}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/></svg>;
     const IconZap = ({size=24, className}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>;
     const IconTrash = ({size=24, className}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>;
+    const IconArrowRight = ({size=24, className}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>;
 
     // --- HELPERS ---
     const formatDate = (dateObj) => dateObj.toISOString().split('T')[0];
@@ -498,7 +499,7 @@
       );
     }
 
-    function ExerciseSearchModal({ onClose, onSelect, exerciseDB, customExercises }) {
+    function ExerciseSearchModal({ onClose, onSelect, exerciseDB, customExercises, initialSearch }) {
       const [searchQuery, setSearchQuery] = useState('');
       
       const allExercises = useMemo(() => {
@@ -506,6 +507,14 @@
          const dbList = Array.isArray(exerciseDB) ? exerciseDB : [];
          return [...customs, ...dbList];
       }, [exerciseDB, customExercises]);
+
+      // If an exercise was already typed in, try to open straight to its info page
+      const initialEx = useMemo(() => {
+         if (!initialSearch) return null;
+         return allExercises.find(e => (e.name||'').toLowerCase() === initialSearch.toLowerCase());
+      }, [initialSearch, allExercises]);
+
+      const [selectedEx, setSelectedEx] = useState(initialEx || null);
       
       const results = useMemo(() => {
         if (!searchQuery.trim()) return allExercises.slice(0, 25);
@@ -516,48 +525,103 @@
       return (
         <div className="fixed inset-0 bg-black/95 z-[70] flex flex-col p-4 animate-in fade-in backdrop-blur-md">
           <div className="w-full max-w-md mx-auto h-full flex flex-col bg-zinc-950 border border-zinc-800 rounded-[2rem] overflow-hidden mt-2 mb-safe shadow-2xl">
-            <div className="flex justify-between items-center p-5 border-b border-zinc-900 bg-zinc-900/50">
-              <h3 className="font-black text-xl italic uppercase text-white">Gains Database</h3>
-              <button type="button" onClick={onClose} className="p-2 bg-zinc-800 rounded-full hover:bg-zinc-700 transition-all text-zinc-400 hover:text-white"><IconX size={20}/></button>
-            </div>
-            <div className="p-4 border-b border-zinc-900">
-              <input 
-                 type="text"
-                 value={searchQuery} 
-                 onChange={e => setSearchQuery(e.target.value)} 
-                 placeholder="Search hundreds of movements..." 
-                 className="w-full bg-black border border-zinc-800 rounded-2xl py-4 px-5 text-white font-bold focus:border-orange-500 outline-none shadow-inner transition-all" 
-                 autoFocus 
-              />
-            </div>
-            <div className="flex-1 overflow-y-auto min-h-0 p-3 space-y-2">
-              {results.length > 0 ? results.map(ex => (
-                <button key={ex.name} type="button" onClick={() => onSelect(ex.name)} className="w-full flex items-center gap-4 p-4 rounded-2xl bg-zinc-900/30 border border-zinc-800/50 hover:bg-zinc-800 transition-all text-left group">
-                  <div className="w-12 h-12 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 text-zinc-600 group-hover:text-orange-500 transition-colors"><IconActivity size={20}/></div>
-                  <div>
-                    <div className="font-black text-white italic text-lg">{ex.name}</div>
-                    <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-1">{ex.isCustom ? 'Custom Entry' : (ex.category || 'General')}</div>
-                  </div>
-                </button>
-              )) : (
-                <div className="p-8 text-center flex flex-col items-center justify-center h-full">
-                   {searchQuery.trim() ? (
-                       <button type="button" onClick={async () => { 
-                          const newName = searchQuery.trim();
-                          if (!newName) return;
-                          try {
-                             await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'custom_exercises'), { name: newName }); 
-                             onSelect(newName);
-                          } catch(err) { console.error(err); }
-                       }} className="bg-orange-500 text-black font-black uppercase px-6 py-4 rounded-2xl shadow-lg animate-pulse transition-all active:scale-95">
-                          Add "{searchQuery}" as Custom
-                       </button>
-                   ) : (
-                       <p className="text-zinc-500 font-bold text-sm">No exercises found.</p>
+            {!selectedEx ? (
+               <>
+                 <div className="flex justify-between items-center p-5 border-b border-zinc-900 bg-zinc-900/50">
+                   <h3 className="font-black text-xl italic uppercase text-white">Gains Database</h3>
+                   <button type="button" onClick={onClose} className="p-2 bg-zinc-800 rounded-full hover:bg-zinc-700 transition-all text-zinc-400 hover:text-white"><IconX size={20}/></button>
+                 </div>
+                 <div className="p-4 border-b border-zinc-900">
+                   <input 
+                      type="text"
+                      value={searchQuery} 
+                      onChange={e => setSearchQuery(e.target.value)} 
+                      placeholder="Search hundreds of movements..." 
+                      className="w-full bg-black border border-zinc-800 rounded-2xl py-4 px-5 text-white font-bold focus:border-orange-500 outline-none shadow-inner transition-all" 
+                      autoFocus 
+                   />
+                 </div>
+                 <div className="flex-1 overflow-y-auto min-h-0 p-3 space-y-2">
+                   {results.length > 0 ? results.map(ex => (
+                     <button key={ex.name} type="button" onClick={() => setSelectedEx(ex)} className="w-full flex items-center gap-4 p-4 rounded-2xl bg-zinc-900/30 border border-zinc-800/50 hover:bg-zinc-800 transition-all text-left group">
+                       <div className="w-12 h-12 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 text-zinc-600 group-hover:text-orange-500 transition-colors"><IconActivity size={20}/></div>
+                       <div>
+                         <div className="font-black text-white italic text-lg">{ex.name}</div>
+                         <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-1">{ex.isCustom ? 'Custom Entry' : (ex.category || 'General')}</div>
+                       </div>
+                     </button>
+                   )) : (
+                     <div className="p-8 text-center flex flex-col items-center justify-center h-full">
+                        {searchQuery.trim() ? (
+                            <button type="button" onClick={async () => { 
+                               const newName = searchQuery.trim();
+                               if (!newName) return;
+                               try {
+                                  await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'custom_exercises'), { name: newName }); 
+                                  onSelect(newName);
+                                  onClose();
+                               } catch(err) { console.error(err); }
+                            }} className="bg-orange-500 text-black font-black uppercase px-6 py-4 rounded-2xl shadow-lg animate-pulse transition-all active:scale-95">
+                               Add "{searchQuery}" as Custom
+                            </button>
+                        ) : (
+                            <p className="text-zinc-500 font-bold text-sm">No exercises found.</p>
+                        )}
+                     </div>
                    )}
-                </div>
-              )}
-            </div>
+                 </div>
+               </>
+            ) : (
+               <div className="flex-1 flex flex-col min-h-0">
+                 <div className="flex justify-between items-center p-5 border-b border-zinc-900 bg-zinc-900/50">
+                   <button onClick={() => setSelectedEx(null)} className="text-orange-500 font-black uppercase tracking-widest text-sm flex items-center gap-1"><IconArrowRight size={16} className="rotate-180" /> Back</button>
+                   <button onClick={onClose} className="p-2 bg-zinc-800 rounded-full hover:bg-zinc-700 transition-all text-zinc-400 hover:text-white"><IconX size={20}/></button>
+                 </div>
+                 <div className="flex-1 overflow-y-auto p-5 space-y-6">
+                   <h2 className="text-3xl font-black text-white italic uppercase leading-tight">{selectedEx.name}</h2>
+                   
+                   {selectedEx.images && selectedEx.images.length > 0 && (
+                     <div className="flex gap-4 overflow-x-auto snap-x hide-scrollbar pb-2">
+                        {selectedEx.images.map((img, i) => (
+                          <img 
+                            key={i} 
+                            src={`${IMG_BASE_URL}${selectedEx.name.replace(/ /g, '_').replace(/\//g, '_')}/${i}.jpg`} 
+                            className="h-48 w-48 object-cover rounded-2xl border-2 border-zinc-800 shrink-0 snap-center bg-zinc-900"
+                            onError={(e) => e.target.style.display = 'none'}
+                            alt={`${selectedEx.name} form ${i+1}`}
+                          />
+                        ))}
+                     </div>
+                   )}
+
+                   <div className="grid grid-cols-2 gap-3">
+                     <div className="bg-zinc-900/50 p-4 rounded-2xl border border-zinc-800 shadow-inner">
+                       <div className="text-[10px] text-zinc-500 font-black uppercase tracking-widest mb-1">Target Muscle</div>
+                       <div className="text-orange-400 font-black capitalize text-sm">{(selectedEx.primaryMuscles || []).join(', ') || selectedEx.category || 'General'}</div>
+                     </div>
+                     <div className="bg-zinc-900/50 p-4 rounded-2xl border border-zinc-800 shadow-inner">
+                       <div className="text-[10px] text-zinc-500 font-black uppercase tracking-widest mb-1">Equipment</div>
+                       <div className="text-white font-black capitalize text-sm">{selectedEx.equipment || 'Bodyweight'}</div>
+                     </div>
+                   </div>
+
+                   {selectedEx.instructions && selectedEx.instructions.length > 0 && (
+                     <div className="bg-zinc-900/30 p-5 rounded-2xl border border-zinc-800">
+                       <h4 className="font-black text-white text-sm uppercase tracking-widest mb-4">Instructions</h4>
+                       <ol className="list-decimal pl-4 space-y-3 text-zinc-300 text-sm font-medium leading-relaxed">
+                         {selectedEx.instructions.map((step, i) => <li key={i} className="pl-2">{step}</li>)}
+                       </ol>
+                     </div>
+                   )}
+                 </div>
+                 
+                 <div className="p-5 border-t border-zinc-900 bg-black">
+                   <button onClick={() => { onSelect(selectedEx.name); onClose(); }} className="w-full bg-orange-500 text-black font-black uppercase tracking-widest py-4 rounded-2xl active:scale-95 transition-all text-lg italic shadow-[0_0_20px_rgba(249,115,22,0.2)]">
+                     Use This Exercise
+                   </button>
+                 </div>
+               </div>
+            )}
           </div>
         </div>
       );
@@ -572,39 +636,65 @@
       const [showSearchModal, setShowSearchModal] = useState(false);
       const [restTime, setRestTime] = useState(0);
       const [showPastSets, setShowPastSets] = useState(false);
+      const [showDropdown, setShowDropdown] = useState(false);
 
       const rival = localUser === 'Jordan' ? 'Aaron' : 'Jordan';
       const today = formatDate(new Date());
 
       useEffect(() => { if (restTime > 0) { const t = setInterval(() => setRestTime(r => r - 1), 1000); return () => clearInterval(t); } }, [restTime]);
 
+      const allExercises = useMemo(() => [...(customExercises || []).map(c => ({ name: c.name, isCustom: true })), ...(exerciseDB || [])], [exerciseDB, customExercises]);
+
+      const searchResults = useMemo(() => {
+        if (!exercise.trim()) return [];
+        const q = exercise.toLowerCase().trim();
+        return allExercises.filter(ex => (ex.name || '').toLowerCase().includes(q)).slice(0, 5);
+      }, [exercise, allExercises]);
+
       const todaysWorkouts = useMemo(() => {
         return workouts.filter(w => w.user === localUser && w.date === today).sort((a,b) => b.timestamp - a.timestamp);
       }, [workouts, localUser, today]);
 
       const lastSets = useMemo(() => {
-        const past = workouts.filter(w => w.user === localUser && w.exercise === exercise && w.date !== today).sort((a,b) => b.timestamp - a.timestamp);
+        const past = workouts.filter(w => w.user === localUser && w.exercise.toLowerCase() === exercise.trim().toLowerCase() && w.date !== today).sort((a,b) => b.timestamp - a.timestamp);
         if (!past.length) return [];
         const lastDate = past[0].date;
         return past.filter(p => p.date === lastDate).reverse();
       }, [workouts, localUser, exercise, today]);
 
       const myPB = useMemo(() => {
-        const sets = workouts.filter(w => w.user === localUser && w.exercise === exercise);
+        const sets = workouts.filter(w => w.user === localUser && w.exercise.toLowerCase() === exercise.trim().toLowerCase());
         return sets.length ? sets.reduce((max, curr) => curr.weight > max.weight ? curr : max, sets[0]) : null;
       }, [workouts, localUser, exercise]);
 
       const rivalPB = useMemo(() => {
-        const sets = workouts.filter(w => w.user === rival && w.exercise === exercise);
+        const sets = workouts.filter(w => w.user === rival && w.exercise.toLowerCase() === exercise.trim().toLowerCase());
         return sets.length ? sets.reduce((max, curr) => curr.weight > max.weight ? curr : max, sets[0]) : null;
       }, [workouts, rival, exercise]);
 
       const handleLog = async (e) => {
         e.preventDefault();
-        if (!weight || !reps || !exercise) return;
+        const finalEx = exercise.trim();
+        if (!weight || !reps || !finalEx) return;
+        
         try {
-          await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'workouts'), { user: localUser, exercise, weight: parseFloat(weight), reps: parseInt(reps, 10), note: note.trim(), date: today, timestamp: Date.now() });
-          setWeight(''); setNote(''); setRestTime(90);
+          await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'workouts'), { 
+             user: localUser, 
+             exercise: finalEx, 
+             weight: parseFloat(weight), 
+             reps: parseInt(reps, 10), 
+             note: note.trim(), 
+             date: today, 
+             timestamp: Date.now() 
+          });
+          
+          // Auto-save custom exercises
+          const exists = allExercises.some(ex => (ex.name || '').toLowerCase() === finalEx.toLowerCase());
+          if (!exists) {
+             await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'custom_exercises'), { name: finalEx });
+          }
+
+          setWeight(''); setNote(''); setRestTime(90); setShowDropdown(false);
         } catch(err) {}
       };
 
@@ -628,7 +718,7 @@
           </div>}
 
           <h2 className="text-3xl font-black italic uppercase text-white mb-6">Log Set</h2>
-          <div className="bg-zinc-900 p-6 rounded-[2.5rem] border border-zinc-800 shadow-2xl relative overflow-hidden">
+          <div className="bg-zinc-900 p-6 rounded-[2.5rem] border border-zinc-800 shadow-2xl relative overflow-visible">
             <form onSubmit={handleLog} className="space-y-5 relative z-10">
               <div>
                 <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block mb-2">Select Split</label>
@@ -641,10 +731,48 @@
 
               <div className="h-px bg-zinc-800"></div>
 
-              <div>
-                <button type="button" onClick={() => setShowSearchModal(true)} className="w-full bg-black border border-zinc-800 rounded-2xl p-4 text-white font-black text-left flex justify-between items-center transition-all hover:border-orange-500/50 shadow-inner">
-                  <span className="truncate">{exercise || "Select Exercise..."}</span> <IconSearch size={20} className="text-orange-500" />
-                </button>
+              <div className="relative">
+                <div className="flex justify-between items-end mb-2">
+                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block">Exercise</label>
+                  <button type="button" onClick={() => setShowSearchModal(true)} className="text-[9px] text-orange-500 font-black uppercase tracking-widest flex items-center gap-1.5 bg-orange-500/10 px-2.5 py-1.5 rounded-lg hover:bg-orange-500/20 transition-all">
+                    <IconSearch size={12} /> Database & Info
+                  </button>
+                </div>
+                <div className="relative">
+                  <input 
+                    type="text" 
+                    value={exercise} 
+                    onChange={e => {
+                       setExercise(e.target.value);
+                       setShowDropdown(true);
+                    }}
+                    onFocus={() => setShowDropdown(true)}
+                    onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
+                    placeholder="Type or search exercise..."
+                    className="w-full bg-black border-2 border-zinc-800 rounded-2xl p-4 pr-12 text-white font-black text-xl outline-none focus:border-orange-500 transition-all shadow-inner"
+                  />
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                    <IconActivity size={20} className="text-orange-500" />
+                  </div>
+                </div>
+                
+                {/* Fast Inline Dropdown Results */}
+                {showDropdown && exercise.length > 0 && searchResults.length > 0 && (
+                   <div className="absolute z-50 w-full mt-2 bg-zinc-900 border-2 border-zinc-700 rounded-2xl shadow-2xl overflow-hidden max-h-60 overflow-y-auto">
+                      {searchResults.map(ex => (
+                         <button 
+                           key={ex.name} 
+                           type="button" 
+                           onClick={() => { setExercise(ex.name); setShowDropdown(false); }}
+                           className="w-full text-left px-4 py-4 border-b border-zinc-800/50 hover:bg-zinc-800 transition-all flex justify-between items-center"
+                         >
+                           <span className="font-black text-white text-base">{ex.name}</span>
+                           <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">{ex.category || 'Custom'}</span>
+                         </button>
+                      ))}
+                   </div>
+                )}
+
                 <div className="flex flex-wrap gap-2 mt-3">
                   {suggestedExercises.map(ex => (
                     <button type="button" key={ex} onClick={() => setExercise(ex)} className={`text-[10px] px-3 py-1.5 rounded-xl font-black transition-all border ${exercise === ex ? 'bg-orange-500/10 text-orange-500 border-orange-500/40' : 'bg-zinc-800/50 text-zinc-500 border-transparent hover:border-zinc-700'}`}>{ex}</button>
@@ -728,6 +856,8 @@
                   </div>
               )}
           </div>
+          
+          {showSearchModal && <ExerciseSearchModal onClose={() => setShowSearchModal(false)} onSelect={(ex) => {setExercise(ex); setShowSearchModal(false);}} exerciseDB={exerciseDB} customExercises={customExercises} initialSearch={exercise} />}
         </div>
       );
     }
