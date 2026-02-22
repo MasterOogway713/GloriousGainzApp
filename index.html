@@ -45,7 +45,7 @@
   <script type="text/babel" data-type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
     import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, collection, addDoc, onSnapshot, query, doc, setDoc, updateDoc, deleteField, arrayUnion } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    import { getFirestore, collection, addDoc, onSnapshot, query, doc, setDoc, updateDoc, deleteField, arrayUnion, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     const { useState, useEffect, useMemo, useRef } = React;
 
@@ -94,6 +94,7 @@
     const IconMessageCircle = ({size=24, className}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>;
     const IconTimer = ({size=24, className}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
     const IconBan = ({size=24, className}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/></svg>;
+    const IconZap = ({size=24, className}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>;
 
     // --- HELPERS ---
     const formatDate = (dateObj) => dateObj.toISOString().split('T')[0];
@@ -150,6 +151,195 @@
       );
     }
 
+    function Gauntlet({ gauntlet, localUser }) {
+      const [isComposing, setIsComposing] = useState(false);
+      const [proposals, setProposals] = useState({});
+      const [selectedMatch, setSelectedMatch] = useState(null);
+
+      const rival = localUser === 'Jordan' ? 'Aaron' : 'Jordan';
+      const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+      const toggleDay = (d) => {
+        setProposals(prev => {
+          const next = { ...prev };
+          if (next[d]) delete next[d];
+          else next[d] = { time: '', certainty: 'Potential' };
+          return next;
+        });
+      };
+
+      const handleSend = async () => {
+        if (Object.keys(proposals).length === 0) return;
+        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'gauntlet', 'current'), {
+          challenger: localUser,
+          target: rival,
+          proposals,
+          status: 'pending',
+          timestamp: Date.now()
+        });
+        setIsComposing(false);
+        setProposals({});
+      };
+
+      const handleAccept = async () => {
+        if (!selectedMatch) return;
+        const prop = gauntlet.proposals[selectedMatch];
+        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'gauntlet', 'current'), {
+          status: 'accepted',
+          lockedDay: selectedMatch,
+          lockedTime: prop.time || 'TBD',
+          lockedCertainty: prop.certainty
+        });
+      };
+
+      const handleClear = async () => {
+        await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'gauntlet', 'current'));
+      };
+
+      const handleCounter = async () => {
+        await handleClear();
+        setIsComposing(true);
+      };
+
+      if (!gauntlet) {
+        return (
+          <div className="mb-8">
+            {!isComposing ? (
+              <button onClick={() => setIsComposing(true)} className="w-full bg-zinc-900 border border-zinc-800 hover:border-orange-500 hover:bg-orange-500/10 text-zinc-400 hover:text-orange-500 font-black uppercase tracking-widest py-4 rounded-[2rem] transition-all flex items-center justify-center gap-2 shadow-lg">
+                <IconCalendar size={20} /> Schedule A Gym Sesh
+              </button>
+            ) : (
+              <div className="bg-zinc-900 p-5 rounded-[2rem] border border-orange-500/50 shadow-[0_0_20px_rgba(249,115,22,0.15)] animate-in fade-in zoom-in-95 duration-300">
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <span className="text-xs font-black uppercase text-orange-500 tracking-widest block">Choose Availability</span>
+                    <span className="text-[10px] text-zinc-400">Select the days you can make it.</span>
+                  </div>
+                  <button onClick={() => {setIsComposing(false); setProposals({});}} className="text-zinc-500 hover:text-white"><IconX size={20} /></button>
+                </div>
+                
+                <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-3 mb-2">
+                  {days.map(d => {
+                    const isSelected = !!proposals[d];
+                    return (
+                      <button key={d} onClick={() => toggleDay(d)} className={`flex-1 min-w-[3.5rem] font-black py-2 rounded-xl transition-all border ${isSelected ? 'bg-orange-500 text-black border-orange-400 shadow-md' : 'bg-black border-zinc-800 text-zinc-400 hover:border-orange-500/50'}`}>
+                        {d}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {Object.keys(proposals).length > 0 && (
+                  <div className="space-y-3 mb-4 animate-in fade-in slide-in-from-top-2">
+                    {Object.entries(proposals).map(([day, details]) => (
+                      <div key={day} className="bg-black/50 p-3 rounded-2xl border border-zinc-800 flex flex-col gap-2">
+                        <div className="flex justify-between items-center">
+                          <span className="font-black text-orange-500">{day}</span>
+                          <div className="flex bg-zinc-900 rounded-lg p-1 border border-zinc-800">
+                            <button onClick={() => setProposals(p => ({...p, [day]: {...p[day], certainty: 'Potential'}}))} className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase transition-all ${details.certainty === 'Potential' ? 'bg-zinc-700 text-white' : 'text-zinc-500'}`}>Potential</button>
+                            <button onClick={() => setProposals(p => ({...p, [day]: {...p[day], certainty: 'Definite'}}))} className={`px-2 py-1 rounded-md text-[10px] font-bold uppercase transition-all ${details.certainty === 'Definite' ? 'bg-emerald-600 text-white' : 'text-zinc-500'}`}>Definite</button>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-2 focus-within:border-orange-500 transition-all">
+                          <IconTimer size={16} className="text-orange-500" />
+                          <input 
+                            type="time" 
+                            value={details.time}
+                            onChange={(e) => setProposals(p => ({...p, [day]: {...p[day], time: e.target.value}}))}
+                            className="w-full bg-transparent text-sm text-white outline-none appearance-none font-bold font-mono"
+                            style={{ colorScheme: 'dark' }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <button 
+                  disabled={Object.keys(proposals).length === 0}
+                  onClick={handleSend}
+                  className="w-full bg-orange-500 text-black font-black uppercase tracking-widest py-3 rounded-2xl transition-all shadow-lg active:scale-95 disabled:opacity-50 disabled:active:scale-100"
+                >
+                  Send Invite
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      if (gauntlet.status === 'pending') {
+        if (gauntlet.challenger === localUser) {
+          return (
+            <div className="mb-8 bg-zinc-900/80 border border-zinc-800 p-5 rounded-[2rem] shadow-lg relative overflow-hidden">
+              <div className="absolute inset-0 bg-orange-500/5 animate-pulse pointer-events-none"></div>
+              <div className="flex justify-between items-start mb-3 relative z-10">
+                <div className="text-[10px] font-black uppercase tracking-widest text-orange-500 flex items-center gap-1.5"><IconCalendar size={14} className="animate-pulse" /> Invite Sent</div>
+                <button onClick={handleClear} className="text-zinc-500 hover:text-red-500 transition-colors"><IconX size={16} /></button>
+              </div>
+              <div className="text-sm font-bold text-white mb-3 relative z-10">Waiting on <span className="text-orange-500 italic">{rival}</span> to see if they can do these date(s)...</div>
+              <div className="flex flex-wrap gap-2 relative z-10">
+                {Object.entries(gauntlet.proposals || {}).map(([day, details]) => (
+                   <div key={day} className="bg-black border border-zinc-800 px-3 py-2 rounded-xl text-xs flex flex-col flex-1 min-w-[30%]">
+                     <span className="font-black text-white">{day} <span className="text-zinc-500 font-normal">{details.time && `@ ${details.time}`}</span></span>
+                     <span className={`text-[9px] font-bold uppercase mt-1 ${details.certainty === 'Definite' ? 'text-emerald-500' : 'text-zinc-500'}`}>{details.certainty}</span>
+                   </div>
+                ))}
+              </div>
+            </div>
+          );
+        } else {
+          return (
+            <div className="mb-8 bg-gradient-to-br from-zinc-900 to-zinc-950 border border-orange-500/50 p-5 rounded-[2rem] shadow-[0_0_30px_rgba(249,115,22,0.2)] animate-in slide-in-from-top-4 relative overflow-hidden">
+              <div className="absolute -top-10 -right-4 opacity-5 text-orange-500 pointer-events-none"><IconCalendar size={100} /></div>
+              <div className="text-[10px] font-black uppercase tracking-widest text-orange-500 mb-1 flex items-center gap-1.5"><IconCalendar size={14} className="animate-pulse" /> Gym Sesh Proposed</div>
+              <div className="text-base font-bold text-white mb-4 leading-tight"><span className="text-orange-500 font-black italic">{gauntlet.challenger}</span> wants to train. Select a date that works or counter.</div>
+              
+              <div className="space-y-2 mb-4 relative z-10">
+                {Object.entries(gauntlet.proposals || {}).map(([day, details]) => (
+                   <button 
+                     key={day} 
+                     onClick={() => setSelectedMatch(day)}
+                     className={`w-full text-left px-4 py-3 rounded-xl border flex justify-between items-center transition-all ${selectedMatch === day ? 'bg-orange-500/10 border-orange-500' : 'bg-black/50 border-zinc-800 hover:border-zinc-600'}`}
+                   >
+                     <div>
+                       <div className={`font-black ${selectedMatch === day ? 'text-orange-500' : 'text-white'}`}>{day}</div>
+                       <div className="text-[10px] font-bold uppercase text-zinc-500 mt-0.5">{details.time ? `Time: ${details.time}` : 'Time: TBD'}</div>
+                     </div>
+                     <span className={`text-[9px] font-black uppercase px-2 py-1 rounded-md ${details.certainty === 'Definite' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-zinc-800 text-zinc-400'}`}>{details.certainty}</span>
+                   </button>
+                ))}
+              </div>
+
+              <div className="flex gap-3 relative z-10">
+                <button disabled={!selectedMatch} onClick={handleAccept} className="flex-1 bg-orange-500 text-black font-black uppercase py-3 rounded-2xl shadow-lg active:scale-95 transition-all text-sm tracking-widest disabled:opacity-50 disabled:scale-100">Lock It In</button>
+                <button onClick={handleCounter} className="flex-[0.5] bg-zinc-950 border border-zinc-700 hover:border-zinc-500 text-white font-bold uppercase py-3 rounded-2xl active:scale-95 transition-all text-xs tracking-wider">Counter</button>
+              </div>
+            </div>
+          );
+        }
+      }
+
+      if (gauntlet.status === 'accepted') {
+        return (
+          <div className="mb-8 bg-gradient-to-br from-yellow-500/20 to-orange-600/20 border border-yellow-500/50 p-6 rounded-[2.5rem] shadow-[0_0_40px_rgba(234,179,8,0.2)] relative overflow-hidden flex flex-col gap-3">
+            <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMiIgY3k9IjIiIHI9IjEiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsMC4xKSIvPjwvc3ZnPg==')] opacity-50 pointer-events-none"></div>
+            
+            <div className="relative z-10 flex justify-between items-start">
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-yellow-500 mb-1 flex items-center gap-2"><IconTrophy size={14} /> Iron Pact Secured</div>
+                <div className="text-2xl font-black text-white italic">{gauntlet.lockedDay}</div>
+                <div className="text-sm font-bold text-yellow-400">{gauntlet.lockedTime} <span className="text-zinc-400 mx-1">•</span> <span className="uppercase text-[10px] tracking-widest">{gauntlet.lockedCertainty}</span></div>
+              </div>
+              <button onClick={handleClear} className="bg-black/50 border border-yellow-500/30 text-yellow-500 hover:bg-yellow-500 hover:text-black w-8 h-8 flex justify-center items-center rounded-full transition-all shadow-lg active:scale-95"><IconX size={14} /></button>
+            </div>
+          </div>
+        );
+      }
+
+      return null;
+    }
+
     function Feed({ workouts, habits, localUser }) {
       const [commentText, setCommentText] = useState({});
       const [showComments, setShowComments] = useState({});
@@ -190,47 +380,51 @@
       return (
         <div className="space-y-4 pb-24">
           <h2 className="text-xs font-black text-zinc-500 uppercase tracking-[0.2em] mb-4">Activity Stream</h2>
-          {allEvents.map(evt => {
-            const isMe = evt.user === localUser;
-            const theme = evt.user === 'Jordan' ? 'blue' : 'emerald';
-            return (
-              <div key={evt.id} className={`p-5 rounded-3xl border transition-all ${isMe ? 'border-zinc-800 bg-zinc-900/40' : `border-${theme}-500/20 bg-${theme}-500/5 shadow-2xl`}`}>
-                <div className="flex justify-between items-start mb-3">
-                  <div className="flex items-center gap-2.5">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black border border-${theme}-500/30 text-${theme}-500 bg-${theme}-500/10 shadow-inner`}>{evt.user.charAt(0)}</div>
-                    <div><span className="font-black text-sm block">{evt.user}</span><span className="text-[10px] text-zinc-500 font-bold uppercase">{evt.type === 'workoutGroup' ? 'Smashed a Session' : 'Habit Check-In'}</span></div>
+          {allEvents.length === 0 ? (
+            <div className="text-center p-8 bg-zinc-900/50 rounded-2xl border border-zinc-800 text-zinc-500">No activity yet. Set the tone!</div>
+          ) : (
+            allEvents.map(evt => {
+              const isMe = evt.user === localUser;
+              const theme = evt.user === 'Jordan' ? 'blue' : 'emerald';
+              return (
+                <div key={evt.id} className={`p-5 rounded-3xl border transition-all ${isMe ? 'border-zinc-800 bg-zinc-900/40' : `border-${theme}-500/20 bg-${theme}-500/5 shadow-2xl`}`}>
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black border border-${theme}-500/30 text-${theme}-500 bg-${theme}-500/10 shadow-inner`}>{evt.user.charAt(0)}</div>
+                      <div><span className="font-black text-sm block">{evt.user}</span><span className="text-[10px] text-zinc-500 font-bold uppercase">{evt.type === 'workoutGroup' ? 'Smashed a Session' : 'Habit Check-In'}</span></div>
+                    </div>
+                    <span className="text-[10px] font-bold text-zinc-600">{new Date(evt.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
                   </div>
-                  <span className="text-[10px] font-bold text-zinc-600">{new Date(evt.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
-                </div>
-                <div className="pl-10">
-                  {evt.type === 'workoutGroup' ? <><h3 className="font-black text-lg text-white italic mb-3 leading-tight underline decoration-orange-500/50 underline-offset-4">{evt.exercise}</h3>
-                    <div className="space-y-2">
-                      {[...evt.sets].reverse().map((s, i) => (
-                        <div key={i} className="flex flex-col gap-1">
-                          <div className="bg-zinc-950 px-3 py-1.5 rounded-xl border border-zinc-800/50 w-fit font-mono text-sm text-orange-400 font-bold">Set {i+1}: {s.weight}kg x {s.reps}</div>
-                          {s.note && <div className="text-xs text-zinc-400 italic pl-3 border-l-2 border-zinc-800">"{s.note}"</div>}
-                        </div>
+                  <div className="pl-10">
+                    {evt.type === 'workoutGroup' ? <><h3 className="font-black text-lg text-white italic mb-3 leading-tight underline decoration-orange-500/50 underline-offset-4">{evt.exercise}</h3>
+                      <div className="space-y-2">
+                        {[...evt.sets].reverse().map((s, i) => (
+                          <div key={i} className="flex flex-col gap-1">
+                            <div className="bg-zinc-950 px-3 py-1.5 rounded-xl border border-zinc-800/50 w-fit font-mono text-sm text-orange-400 font-bold">Set {i+1}: {s.weight}kg x {s.reps}</div>
+                            {s.note && <div className="text-xs text-zinc-400 italic pl-3 border-l-2 border-zinc-800">"{s.note}"</div>}
+                          </div>
+                        ))}
+                      </div></> : 
+                      <div className="flex flex-wrap gap-1.5 pt-1">{(['calories','protein','water','noAlcohol']).map(h => evt[h] && <span key={h} className="text-[9px] bg-zinc-800 text-zinc-300 px-2.5 py-1 rounded-full font-black uppercase tracking-wider border border-zinc-700">✓ {h}</span>)}</div>}
+                    
+                    <div className="flex gap-2 mt-5 pt-4 border-t border-zinc-800/50">
+                      {['🔥', '💪', '🐐', '🤡'].map(emoji => (
+                        <button key={emoji} onClick={() => handleReact(evt, evt.reactions?.[localUser] === emoji ? null : emoji)} className={`px-3 py-1 rounded-full text-xs border transition-all ${evt.reactions?.[localUser] === emoji ? 'bg-orange-500/20 border-orange-500' : 'bg-zinc-800/50 border-zinc-800 opacity-60'}`}>{emoji} <span className="font-black ml-1">{Object.values(evt.reactions || {}).filter(e => e === emoji).length || ''}</span></button>
                       ))}
-                    </div></> : 
-                    <div className="flex flex-wrap gap-1.5 pt-1">{(['calories','protein','water','noAlcohol']).map(h => evt[h] && <span key={h} className="text-[9px] bg-zinc-800 text-zinc-300 px-2.5 py-1 rounded-full font-black uppercase tracking-wider border border-zinc-700">✓ {h}</span>)}</div>}
-                  
-                  <div className="flex gap-2 mt-5 pt-4 border-t border-zinc-800/50">
-                    {['🔥', '💪', '🐐', '🤡'].map(emoji => (
-                      <button key={emoji} onClick={() => handleReact(evt, evt.reactions?.[localUser] === emoji ? null : emoji)} className={`px-3 py-1 rounded-full text-xs border transition-all ${evt.reactions?.[localUser] === emoji ? 'bg-orange-500/20 border-orange-500' : 'bg-zinc-800/50 border-zinc-800 opacity-60'}`}>{emoji} <span className="font-black ml-1">{Object.values(evt.reactions || {}).filter(e => e === emoji).length || ''}</span></button>
-                    ))}
-                  </div>
+                    </div>
 
-                  <div className="mt-4">
-                    <button onClick={() => setShowComments({...showComments, [evt.id]: !showComments[evt.id]})} className="text-[10px] text-zinc-500 flex items-center gap-1.5 font-black uppercase tracking-widest hover:text-white transition-all"><IconMessageCircle size={14} /> {evt.comments?.length || 0} Comments</button>
-                    {showComments[evt.id] && <div className="mt-4 space-y-3 pl-4 border-l-2 border-zinc-800 animate-in slide-in-from-left-2 duration-300">
-                      {evt.comments?.map((c, i) => <div key={i} className="text-xs"><span className={`font-black ${c.user === 'Jordan' ? 'text-blue-500' : 'text-emerald-500'}`}>{c.user}: </span><span className="text-zinc-300 font-medium">{c.text}</span></div>)}
-                      <div className="flex gap-2 pt-2"><input value={commentText[evt.id] || ''} onChange={e => setCommentText({...commentText, [evt.id]: e.target.value})} placeholder="Write a comment..." className="flex-1 bg-black border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-orange-500 transition-all" /><button onClick={() => handleAddComment(evt)} className="bg-zinc-800 px-4 rounded-xl text-xs font-black uppercase text-zinc-400 hover:text-white transition-colors">Post</button></div>
-                    </div>}
+                    <div className="mt-4">
+                      <button onClick={() => setShowComments({...showComments, [evt.id]: !showComments[evt.id]})} className="text-[10px] text-zinc-500 flex items-center gap-1.5 font-black uppercase tracking-widest hover:text-white transition-all"><IconMessageCircle size={14} /> {evt.comments?.length || 0} Comments</button>
+                      {showComments[evt.id] && <div className="mt-4 space-y-3 pl-4 border-l-2 border-zinc-800 animate-in slide-in-from-left-2 duration-300">
+                        {evt.comments?.map((c, i) => <div key={i} className="text-xs"><span className={`font-black ${c.user === 'Jordan' ? 'text-blue-500' : 'text-emerald-500'}`}>{c.user}: </span><span className="text-zinc-300 font-medium">{c.text}</span></div>)}
+                        <div className="flex gap-2 pt-2"><input value={commentText[evt.id] || ''} onChange={e => setCommentText({...commentText, [evt.id]: e.target.value})} placeholder="Write a comment..." className="flex-1 bg-black border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-orange-500 transition-all" /><button onClick={() => handleAddComment(evt)} className="bg-zinc-800 px-4 rounded-xl text-xs font-black uppercase text-zinc-400 hover:text-white transition-colors">Post</button></div>
+                      </div>}
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
       );
     }
@@ -477,7 +671,7 @@
           let streak = 0; let d = new Date();
           while(perfDays.has(formatDate(d))) { streak++; d.setDate(d.getDate()-1); }
           const readiness = Math.round((consistency * 0.4) + (streak * 4) + (pbs * 6));
-          return { consistency, pbs, streak, readiness: Math.min(readiness, 100) };
+          return { consistency: isNaN(consistency) ? 0 : consistency, pbs, streak, readiness: isNaN(readiness) ? 0 : Math.min(readiness, 100) };
         };
         return { Jordan: calculate('Jordan'), Aaron: calculate('Aaron') };
       }, [workouts, habits, profiles]);
@@ -585,6 +779,7 @@
       );
     }
 
+    // --- MAIN APP ---
     function App() {
       const [authUser, setAuthUser] = useState(null);
       const [localUser, setLocalUser] = useState(localStorage.getItem('ts_user') || null);
@@ -594,6 +789,7 @@
       const [profiles, setProfiles] = useState({});
       const [exerciseDB, setExerciseDB] = useState([]);
       const [customExercises, setCustomExercises] = useState([]);
+      const [gauntlet, setGauntlet] = useState(null);
       const [loading, setLoading] = useState(true);
 
       useEffect(() => {
@@ -625,6 +821,7 @@
         const hQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'habits'));
         const pQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'profiles'));
         const cQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'custom_exercises'));
+        const gDoc = doc(db, 'artifacts', appId, 'public', 'data', 'gauntlet', 'current');
 
         const unsubW = onSnapshot(wQuery, s => setWorkouts(s.docs.map(d => ({id:d.id, ...d.data()}))), (err) => console.error("Workouts Error:", err));
         const unsubH = onSnapshot(hQuery, s => setHabits(s.docs.map(d => ({id:d.id, ...d.data()}))), (err) => console.error("Habits Error:", err));
@@ -634,8 +831,13 @@
           setLoading(false); 
         }, (err) => { console.error("Profiles Error:", err); setLoading(false); });
         const unsubC = onSnapshot(cQuery, s => setCustomExercises(s.docs.map(d => ({id:d.id, ...d.data()}))), (err) => console.error("Custom Exercises Error:", err));
+        
+        const unsubG = onSnapshot(gDoc, (d) => {
+           if (d.exists()) setGauntlet(d.data());
+           else setGauntlet(null);
+        }, (err) => console.error("Gauntlet Error:", err));
 
-        return () => { unsubW(); unsubH(); unsubP(); unsubC(); };
+        return () => { unsubW(); unsubH(); unsubP(); unsubC(); unsubG(); };
       }, [authUser]);
 
       if (!localUser) return <WelcomeScreen onSelect={(u) => { localStorage.setItem('ts_user', u); setLocalUser(u); }} />;
@@ -645,7 +847,12 @@
         <div className="min-h-screen bg-zinc-950 text-slate-50 font-sans selection:bg-orange-500/30 overflow-x-hidden">
           <Header localUser={localUser} />
           <main className="p-4 max-w-md mx-auto pt-6">
-            {activeTab === 'hub' && <Feed workouts={workouts} habits={habits} localUser={localUser} />}
+            {activeTab === 'hub' && (
+              <>
+                <Gauntlet gauntlet={gauntlet} localUser={localUser} />
+                <Feed workouts={workouts} habits={habits} localUser={localUser} />
+              </>
+            )}
             {activeTab === 'train' && <Train workouts={workouts} localUser={localUser} exerciseDB={exerciseDB} customExercises={customExercises} />}
             {activeTab === 'diet' && <Diet habits={habits} localUser={localUser} />}
             {activeTab === 'history' && <History workouts={workouts} habits={habits} profiles={profiles} localUser={localUser} />}
