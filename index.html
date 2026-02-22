@@ -81,6 +81,38 @@
     };
     const REP_TARGETS = [4, 8, 10, 12, 15, 20, 30];
 
+    const FALLBACK_EXERCISES = [
+      { name: "Bench Press", category: "Chest", equipment: "Barbell" },
+      { name: "Incline Dumbbell Press", category: "Chest", equipment: "Dumbbell" },
+      { name: "Pec Deck", category: "Chest", equipment: "Machine" },
+      { name: "Tricep Extension", category: "Triceps", equipment: "Cable" },
+      { name: "Skullcrushers", category: "Triceps", equipment: "Barbell" },
+      { name: "Dips", category: "Triceps", equipment: "Bodyweight" },
+      { name: "Deadlift", category: "Back", equipment: "Barbell" },
+      { name: "Pull-ups", category: "Back", equipment: "Bodyweight" },
+      { name: "Barbell Row", category: "Back", equipment: "Barbell" },
+      { name: "Lat Pulldown", category: "Back", equipment: "Cable" },
+      { name: "Seated Cable Row", category: "Back", equipment: "Cable" },
+      { name: "Dumbbell Curl", category: "Biceps", equipment: "Dumbbell" },
+      { name: "Hammer Curl", category: "Biceps", equipment: "Dumbbell" },
+      { name: "Overhead Press", category: "Shoulders", equipment: "Barbell" },
+      { name: "Lateral Raises", category: "Shoulders", equipment: "Dumbbell" },
+      { name: "Front Raise", category: "Shoulders", equipment: "Dumbbell" },
+      { name: "Face Pulls", category: "Shoulders", equipment: "Cable" },
+      { name: "Crunch", category: "Abs", equipment: "Bodyweight" },
+      { name: "Plank", category: "Abs", equipment: "Bodyweight" },
+      { name: "Cable Woodchop", category: "Abs", equipment: "Cable" },
+      { name: "Squat", category: "Legs", equipment: "Barbell" },
+      { name: "Leg Press", category: "Legs", equipment: "Machine" },
+      { name: "Leg Extension", category: "Legs", equipment: "Machine" },
+      { name: "Hamstring Curl", category: "Legs", equipment: "Machine" },
+      { name: "Calf Raise", category: "Legs", equipment: "Machine" },
+      { name: "Lunges", category: "Legs", equipment: "Dumbbell" },
+      { name: "Hip Thrust", category: "Legs", equipment: "Barbell" },
+      { name: "Farmers Walk", category: "Other", equipment: "Dumbbell" },
+      { name: "Shrugs", category: "Other", equipment: "Dumbbell" }
+    ];
+
     // --- ICONS ---
     const IconTrophy = ({className, size=24}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7c0 3.31 2.69 6 6 6s6-2.69 6-6V2Z"/></svg>;
     const IconPlus = ({size=24, className}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>;
@@ -467,21 +499,64 @@
     }
 
     function ExerciseSearchModal({ onClose, onSelect, exerciseDB, customExercises }) {
-      const [query, setQuery] = useState('');
-      const allExercises = useMemo(() => [...(customExercises || []).map(c => ({ name: c.name, isCustom: true })), ...(exerciseDB || [])], [exerciseDB, customExercises]);
-      const results = useMemo(() => query ? allExercises.filter(ex => ex.name.toLowerCase().includes(query.toLowerCase())).slice(0, 30) : allExercises.slice(0, 20), [query, allExercises]);
+      const [searchQuery, setSearchQuery] = useState('');
+      
+      const allExercises = useMemo(() => {
+         const customs = Array.isArray(customExercises) ? customExercises.map(c => ({ name: c.name, isCustom: true })) : [];
+         const dbList = Array.isArray(exerciseDB) ? exerciseDB : [];
+         return [...customs, ...dbList];
+      }, [exerciseDB, customExercises]);
+      
+      const results = useMemo(() => {
+        if (!searchQuery.trim()) return allExercises.slice(0, 25);
+        const q = searchQuery.toLowerCase().trim();
+        return allExercises.filter(ex => (ex.name || '').toLowerCase().includes(q)).slice(0, 30);
+      }, [searchQuery, allExercises]);
+
       return (
-        <div className="fixed inset-0 bg-black/95 z-[60] flex flex-col p-4 animate-in fade-in backdrop-blur-sm">
-          <div className="w-full max-w-md mx-auto h-full flex flex-col bg-zinc-950 border border-zinc-800 rounded-[2rem] overflow-hidden mt-4 shadow-2xl">
-            <div className="flex justify-between items-center p-6 border-b border-zinc-900 bg-zinc-900/50"><h3 className="font-black text-xl italic uppercase">Gains Database</h3><button onClick={onClose} className="p-2 bg-zinc-800 rounded-full hover:bg-zinc-700 transition-all"><IconX size={20}/></button></div>
-            <div className="p-6 border-b border-zinc-900"><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search exercises..." className="w-full bg-black border border-zinc-800 rounded-2xl py-4 px-5 text-white font-bold focus:border-orange-500 outline-none shadow-inner transition-all" autoFocus /></div>
-            <div className="flex-1 overflow-y-auto p-3 space-y-2">
-              {results.length ? results.map(ex => (
-                <button key={ex.name} onClick={() => onSelect(ex.name)} className="w-full flex items-center gap-4 p-4 rounded-2xl bg-zinc-900/30 border border-zinc-800/50 hover:bg-zinc-800 transition-all text-left">
-                  <div className="w-12 h-12 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 text-zinc-600"><IconActivity size={20}/></div>
-                  <div><div className="font-black text-white italic">{ex.name}</div><div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">{ex.isCustom ? 'Custom Entry' : ex.category}</div></div>
+        <div className="fixed inset-0 bg-black/95 z-[70] flex flex-col p-4 animate-in fade-in backdrop-blur-md">
+          <div className="w-full max-w-md mx-auto h-full flex flex-col bg-zinc-950 border border-zinc-800 rounded-[2rem] overflow-hidden mt-2 mb-safe shadow-2xl">
+            <div className="flex justify-between items-center p-5 border-b border-zinc-900 bg-zinc-900/50">
+              <h3 className="font-black text-xl italic uppercase text-white">Gains Database</h3>
+              <button type="button" onClick={onClose} className="p-2 bg-zinc-800 rounded-full hover:bg-zinc-700 transition-all text-zinc-400 hover:text-white"><IconX size={20}/></button>
+            </div>
+            <div className="p-4 border-b border-zinc-900">
+              <input 
+                 type="text"
+                 value={searchQuery} 
+                 onChange={e => setSearchQuery(e.target.value)} 
+                 placeholder="Search hundreds of movements..." 
+                 className="w-full bg-black border border-zinc-800 rounded-2xl py-4 px-5 text-white font-bold focus:border-orange-500 outline-none shadow-inner transition-all" 
+                 autoFocus 
+              />
+            </div>
+            <div className="flex-1 overflow-y-auto min-h-0 p-3 space-y-2">
+              {results.length > 0 ? results.map(ex => (
+                <button key={ex.name} type="button" onClick={() => onSelect(ex.name)} className="w-full flex items-center gap-4 p-4 rounded-2xl bg-zinc-900/30 border border-zinc-800/50 hover:bg-zinc-800 transition-all text-left group">
+                  <div className="w-12 h-12 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 text-zinc-600 group-hover:text-orange-500 transition-colors"><IconActivity size={20}/></div>
+                  <div>
+                    <div className="font-black text-white italic text-lg">{ex.name}</div>
+                    <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-1">{ex.isCustom ? 'Custom Entry' : (ex.category || 'General')}</div>
+                  </div>
                 </button>
-              )) : <div className="p-10 text-center"><button onClick={async () => { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'custom_exercises'), { name: query.trim() }); onSelect(query.trim()); }} className="bg-orange-500 text-black font-black uppercase px-6 py-4 rounded-2xl shadow-lg animate-pulse transition-all active:scale-95">Add "{query}" as Custom</button></div>}
+              )) : (
+                <div className="p-8 text-center flex flex-col items-center justify-center h-full">
+                   {searchQuery.trim() ? (
+                       <button type="button" onClick={async () => { 
+                          const newName = searchQuery.trim();
+                          if (!newName) return;
+                          try {
+                             await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'custom_exercises'), { name: newName }); 
+                             onSelect(newName);
+                          } catch(err) { console.error(err); }
+                       }} className="bg-orange-500 text-black font-black uppercase px-6 py-4 rounded-2xl shadow-lg animate-pulse transition-all active:scale-95">
+                          Add "{searchQuery}" as Custom
+                       </button>
+                   ) : (
+                       <p className="text-zinc-500 font-bold text-sm">No exercises found.</p>
+                   )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -549,7 +624,7 @@
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-24">
           {restTime > 0 && <div className="fixed bottom-[80px] left-1/2 -translate-x-1/2 bg-zinc-950 border border-orange-500 text-orange-500 px-6 py-4 rounded-full font-mono text-2xl font-black shadow-[0_0_30px_rgba(249,115,22,0.3)] z-50 flex items-center gap-4 animate-bounce">
             <IconTimer size={24} /> {Math.floor(restTime/60)}:{(restTime%60).toString().padStart(2, '0')}
-            <button onClick={() => setRestTime(0)} className="text-zinc-600 ml-2 hover:text-white"><IconX size={20}/></button>
+            <button type="button" onClick={() => setRestTime(0)} className="text-zinc-600 ml-2 hover:text-white"><IconX size={20}/></button>
           </div>}
 
           <h2 className="text-3xl font-black italic uppercase text-white mb-6">Log Set</h2>
@@ -647,7 +722,7 @@
                                  <div className="font-mono text-orange-500 font-bold text-xs">{w.weight}kg x {w.reps}</div>
                                  {w.note && <div className="text-[10px] text-zinc-400 italic mt-1">"{w.note}"</div>}
                              </div>
-                             <button onClick={() => handleDeleteSet(w.id)} className="text-zinc-600 hover:text-red-500 p-2 transition-colors"><IconTrash size={18}/></button>
+                             <button type="button" onClick={() => handleDeleteSet(w.id)} className="text-zinc-600 hover:text-red-500 p-2 transition-colors"><IconTrash size={18}/></button>
                          </div>
                      ))}
                   </div>
@@ -885,7 +960,7 @@
       const [workouts, setWorkouts] = useState([]);
       const [habits, setHabits] = useState([]);
       const [profiles, setProfiles] = useState({});
-      const [exerciseDB, setExerciseDB] = useState([]);
+      const [exerciseDB, setExerciseDB] = useState(FALLBACK_EXERCISES);
       const [customExercises, setCustomExercises] = useState([]);
       const [gauntlet, setGauntlet] = useState(null);
       const [loading, setLoading] = useState(true);
@@ -908,7 +983,14 @@
           else initAuth();
         });
 
-        fetch(DB_URL).then(res => res.json()).then(setExerciseDB).catch(e => {});
+        fetch(DB_URL)
+          .then(res => res.json())
+          .then(data => {
+            if (Array.isArray(data) && data.length > 0) setExerciseDB(data);
+            else if (data && Array.isArray(data.exercises) && data.exercises.length > 0) setExerciseDB(data.exercises);
+          })
+          .catch(e => console.error("DB Fetch Error:", e));
+
         return () => unsubscribeAuth();
       }, []);
 
