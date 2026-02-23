@@ -1591,10 +1591,12 @@
       const [loading, setLoading] = useState(true);
 
       useEffect(() => {
-        // Ultimate Failsafe: NO MATTER WHAT, drop the loading screen after 3.5 seconds
-        const authFailsafe = setTimeout(() => {
-           setLoading(false);
-        }, 3500);
+        let isMounted = true;
+        
+        // Failsafe to guarantee the app opens after 3s even if DB/Auth is fully unreachable
+        const failsafe = setTimeout(() => {
+           if (isMounted) setLoading(false);
+        }, 3000);
 
         const initAuth = async () => {
           try {
@@ -1605,32 +1607,38 @@
             }
           } catch (error) {
             console.error("Auth error:", error);
-            setLoading(false); // Drop loading immediately if auth strictly errors out
+            // Fallback: If your Firebase project has Anonymous auth disabled, 
+            // this guarantees the app will still open and attempt to load public data!
+            if (isMounted) setAuthUser({ uid: 'fallback-unauthenticated' });
           }
         };
-        
-        initAuth();
 
         const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-           setAuthUser(user);
+          if (user) {
+             if (isMounted) setAuthUser(user);
+          } else {
+             initAuth();
+          }
         });
 
         fetch(DB_URL)
           .then(res => res.json())
           .then(data => {
+            if (!isMounted) return;
             if (Array.isArray(data) && data.length > 0) setExerciseDB(data);
             else if (data && Array.isArray(data.exercises) && data.exercises.length > 0) setExerciseDB(data.exercises);
           })
           .catch(e => console.error("DB Fetch Error:", e));
 
         return () => {
+           isMounted = false;
            unsubscribeAuth();
-           clearTimeout(authFailsafe);
+           clearTimeout(failsafe);
         };
       }, []);
 
       useEffect(() => {
-        if (!authUser) return; // Completely blocks database fetching until auth completes
+        if (!authUser) return; // Wait for Firebase Auth handshake OR fallback before querying DB
 
         const wQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'workouts'));
         const hQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'habits'));
@@ -1653,8 +1661,8 @@
           setProfiles(p); 
           setLoading(false); // Successfully loaded data, drop loading screen
         }, (err) => { 
-           console.error(err); 
-           setLoading(false); 
+           console.error("DB connection error:", err); 
+           setLoading(false); // Drop loading screen even if it fails
         });
 
         const unsubG = onSnapshot(gDoc, (d) => {
@@ -1665,7 +1673,6 @@
         const unsubS = onSnapshot(sDoc, (d) => {
            if (d.exists()) setAppSettings(d.data());
         }, (err) => console.error(err));
-
 
         return () => { unsubW(); unsubH(); unsubP(); unsubR(); unsubProf(); unsubC(); unsubG(); unsubS(); };
       }, [authUser]);
@@ -1700,5 +1707,3 @@
   </script>
 </body>
 </html>
-
-
