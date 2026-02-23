@@ -1591,6 +1591,7 @@
       const [loading, setLoading] = useState(true);
 
       useEffect(() => {
+        // MUST completely await authentication before allowing any DB queries to run
         const initAuth = async () => {
           try {
             if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -1602,19 +1603,12 @@
             console.error("Auth error:", error);
           }
         };
+        
+        initAuth();
 
         const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-          if (user) {
-             setAuthUser(user);
-             setLoading(false); // Auth resolved, safe to show UI
-          }
-          else initAuth();
+           setAuthUser(user);
         });
-
-        // Failsafe in case auth gets stuck or doesn't resolve cleanly
-        const failsafe = setTimeout(() => {
-           setLoading(false);
-        }, 3000);
 
         fetch(DB_URL)
           .then(res => res.json())
@@ -1624,14 +1618,11 @@
           })
           .catch(e => console.error("DB Fetch Error:", e));
 
-        return () => {
-           unsubscribeAuth();
-           clearTimeout(failsafe);
-        };
+        return () => unsubscribeAuth();
       }, []);
 
       useEffect(() => {
-        if (!authUser) return;
+        if (!authUser) return; // Completely blocks database fetching until auth completes
 
         const wQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'workouts'));
         const hQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'habits'));
@@ -1646,20 +1637,36 @@
         const unsubH = onSnapshot(hQuery, s => setHabits(s.docs.map(d => ({id:d.id, ...d.data()}))), (err) => console.error(err));
         const unsubP = onSnapshot(pQuery, s => setPosts(s.docs.map(d => ({id:d.id, ...d.data()}))), (err) => console.error(err));
         const unsubR = onSnapshot(rQuery, s => setRecipes(s.docs.map(d => ({id:d.id, ...d.data()}))), (err) => console.error(err));
+        const unsubC = onSnapshot(cQuery, s => setCustomExercises(s.docs.map(d => ({id:d.id, ...d.data()}))), (err) => console.error(err));
+        
+        // Profiles is our benchmark to know data is successfully flowing
         const unsubProf = onSnapshot(profQuery, s => { 
           const p={}; s.docs.forEach(d => p[d.id]=d.data()); 
           setProfiles(p); 
-        }, (err) => console.error(err));
-        const unsubC = onSnapshot(cQuery, s => setCustomExercises(s.docs.map(d => ({id:d.id, ...d.data()}))), (err) => console.error(err));
+          setLoading(false); 
+        }, (err) => { 
+           console.error(err); 
+           setLoading(false); 
+        });
+
         const unsubG = onSnapshot(gDoc, (d) => {
            if (d.exists()) setGauntlet(d.data());
            else setGauntlet(null);
         }, (err) => console.error(err));
+        
         const unsubS = onSnapshot(sDoc, (d) => {
            if (d.exists()) setAppSettings(d.data());
         }, (err) => console.error(err));
 
-        return () => { unsubW(); unsubH(); unsubP(); unsubR(); unsubProf(); unsubC(); unsubG(); unsubS(); };
+        // Absolute failsafe - drops the loading screen after 4 seconds regardless
+        const loadingFailsafe = setTimeout(() => {
+           setLoading(false);
+        }, 4000);
+
+        return () => { 
+           unsubW(); unsubH(); unsubP(); unsubR(); unsubProf(); unsubC(); unsubG(); unsubS(); 
+           clearTimeout(loadingFailsafe);
+        };
       }, [authUser]);
 
       if (!localUser) return <WelcomeScreen onSelect={(u) => { localStorage.setItem('ts_user', u); setLocalUser(u); }} />;
@@ -1692,5 +1699,3 @@
   </script>
 </body>
 </html>
-
-
