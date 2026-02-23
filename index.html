@@ -129,9 +129,37 @@
     const IconZap = ({size=24, className}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>;
     const IconTrash = ({size=24, className}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>;
     const IconArrowRight = ({size=24, className}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>;
+    const IconCamera = ({size=24, className}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>;
+    const IconBook = ({size=24, className}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>;
+    const IconChevronLeft = ({size=24, className}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>;
+    const IconChevronRight = ({size=24, className}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>;
 
     // --- HELPERS ---
-    const formatDate = (dateObj) => dateObj.toISOString().split('T')[0];
+    const formatDate = (dateObj) => {
+       const tzOffset = dateObj.getTimezoneOffset() * 60000;
+       return (new Date(dateObj - tzOffset)).toISOString().split('T')[0];
+    };
+
+    const compressImage = (file, maxWidth = 800) => {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+          const img = new Image();
+          img.src = event.target.result;
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let scaleSize = maxWidth / img.width;
+            if (scaleSize > 1) scaleSize = 1; // Don't scale up
+            canvas.width = img.width * scaleSize;
+            canvas.height = img.height * scaleSize;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            resolve(canvas.toDataURL('image/jpeg', 0.7)); // Compress to 70% quality JPEG
+          };
+        };
+      });
+    };
 
     // --- SCREENS ---
     function WelcomeScreen({ onSelect }) {
@@ -374,16 +402,24 @@
       return null;
     }
 
-    function Feed({ workouts, habits, localUser }) {
+    function Feed({ workouts, habits, posts, localUser }) {
       const [commentText, setCommentText] = useState({});
       const [showComments, setShowComments] = useState({});
+      const [postText, setPostText] = useState('');
+      const [postImage, setPostImage] = useState(null);
+      const [isPosting, setIsPosting] = useState(false);
+      const fileInputRef = useRef(null);
       
       const allEvents = useMemo(() => {
-        const evts = [...workouts.map(w => ({ ...w, type: 'workout' })), ...habits.map(h => ({ ...h, type: 'habit' }))].sort((a, b) => b.timestamp - a.timestamp);
+        const evts = [
+          ...workouts.map(w => ({ ...w, type: 'workout' })), 
+          ...habits.map(h => ({ ...h, type: 'habit' })),
+          ...posts.map(p => ({ ...p, type: 'post' }))
+        ].sort((a, b) => b.timestamp - a.timestamp);
+        
         const groups = {}; const result = [];
         evts.forEach(evt => {
           if (evt.type === 'workout') {
-            // Group by User + Date to combine entire sessions
             const key = `${evt.user}-${evt.date}`;
             if (!groups[key]) {
               groups[key] = { 
@@ -408,10 +444,10 @@
           } else { result.push(evt); }
         });
         return result;
-      }, [workouts, habits]);
+      }, [workouts, habits, posts]);
 
       const handleReact = async (evt, emoji) => {
-        const col = evt.type === 'workoutGroup' ? 'workouts' : 'habits';
+        const col = evt.type === 'workoutGroup' ? 'workouts' : (evt.type === 'habit' ? 'habits' : 'posts');
         const docId = evt.type === 'workoutGroup' ? evt.primaryDocId : evt.id;
         try {
           await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', col, docId), { [`reactions.${localUser}`]: emoji || deleteField() });
@@ -420,7 +456,7 @@
 
       const handleAddComment = async (evt) => {
         const txt = commentText[evt.id]; if (!txt?.trim()) return;
-        const col = evt.type === 'workoutGroup' ? 'workouts' : 'habits';
+        const col = evt.type === 'workoutGroup' ? 'workouts' : (evt.type === 'habit' ? 'habits' : 'posts');
         const docId = evt.type === 'workoutGroup' ? evt.primaryDocId : evt.id;
         try {
           await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', col, docId), { comments: arrayUnion({ user: localUser, text: txt.trim(), timestamp: Date.now() }) });
@@ -428,8 +464,67 @@
         } catch(e) {}
       };
 
+      const handleImageSelect = async (e) => {
+         const file = e.target.files[0];
+         if (!file) return;
+         try {
+            const compressedBase64 = await compressImage(file, 800);
+            setPostImage(compressedBase64);
+         } catch (err) { console.error("Compression failed", err); }
+      };
+
+      const submitPost = async () => {
+         if (!postText.trim() && !postImage) return;
+         setIsPosting(true);
+         try {
+            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'posts'), {
+               user: localUser,
+               text: postText.trim(),
+               imageUrl: postImage,
+               timestamp: Date.now()
+            });
+            setPostText('');
+            setPostImage(null);
+         } catch (err) { console.error(err); }
+         setIsPosting(false);
+      };
+
       return (
-        <div className="space-y-4 pb-24">
+        <div className="space-y-6 pb-24">
+          
+          <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-[2rem] shadow-lg">
+             <div className="flex flex-col gap-3">
+               <textarea 
+                  value={postText}
+                  onChange={(e) => setPostText(e.target.value)}
+                  placeholder="Share an update or some trash talk..."
+                  className="w-full bg-black border border-zinc-800 rounded-2xl p-4 text-white font-bold outline-none focus:border-orange-500 transition-all text-sm resize-none"
+                  rows="2"
+               ></textarea>
+               
+               {postImage && (
+                 <div className="relative">
+                   <img src={postImage} alt="Post preview" className="w-full h-48 object-cover rounded-xl border border-zinc-800" />
+                   <button onClick={() => setPostImage(null)} className="absolute top-2 right-2 bg-black/70 p-1.5 rounded-full text-white hover:text-red-500 backdrop-blur-sm"><IconX size={16}/></button>
+                 </div>
+               )}
+
+               <div className="flex justify-between items-center px-1">
+                 <input type="file" accept="image/*" ref={fileInputRef} className="hidden" onChange={handleImageSelect} />
+                 <button onClick={() => fileInputRef.current.click()} className="text-zinc-400 hover:text-orange-500 flex items-center gap-2 text-xs font-bold transition-colors">
+                   <IconCamera size={20} /> Attach Photo
+                 </button>
+                 <button 
+                    onClick={submitPost}
+                    disabled={isPosting || (!postText.trim() && !postImage)}
+                    className="bg-orange-500 text-black px-6 py-2 rounded-xl font-black uppercase text-xs tracking-widest active:scale-95 transition-all disabled:opacity-50 disabled:scale-100 shadow-md"
+                 >
+                   {isPosting ? 'Posting...' : 'Post'}
+                 </button>
+               </div>
+             </div>
+          </div>
+
           <h2 className="text-xs font-black text-zinc-500 uppercase tracking-[0.2em] mb-4">Activity Stream</h2>
           {allEvents.length === 0 ? (
             <div className="text-center p-8 bg-zinc-900/50 rounded-2xl border border-zinc-800 text-zinc-500">No activity yet. Set the tone!</div>
@@ -445,7 +540,7 @@
                       <div>
                         <span className="font-black text-sm block">{evt.user}</span>
                         <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wide">
-                          {evt.type === 'workoutGroup' ? `Smashed a Session (${evt.totalSets} Sets)` : 'Habit Check-In'}
+                          {evt.type === 'workoutGroup' ? `Smashed a Session (${evt.totalSets} Sets)` : evt.type === 'habit' ? 'Habit Check-In' : 'Shared an Update'}
                         </span>
                       </div>
                     </div>
@@ -471,15 +566,20 @@
                           </div>
                         ))}
                       </div>
-                    ) : (
+                    ) : evt.type === 'habit' ? (
                       <div className="flex flex-wrap gap-1.5 pt-1">
                         {['calories','protein','water','noAlcohol'].map(h => evt[h] && <span key={h} className="text-[9px] bg-zinc-800 text-zinc-300 px-2.5 py-1 rounded-full font-black uppercase tracking-wider border border-zinc-700">✓ {h}</span>)}
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {evt.text && <p className="text-sm font-bold text-zinc-200 whitespace-pre-wrap">{evt.text}</p>}
+                        {evt.imageUrl && <img src={evt.imageUrl} alt="Post attached" className="w-full max-h-80 object-cover rounded-2xl border border-zinc-800 shadow-md" />}
                       </div>
                     )}
                     
                     <div className="flex gap-2 mt-5 pt-4 border-t border-zinc-800/50">
                       {['🔥', '💪', '🐐', '🤡'].map(emoji => (
-                        <button key={emoji} onClick={() => handleReact(evt, evt.reactions?.[localUser] === emoji ? null : emoji)} className={`px-3 py-1 rounded-full text-xs border transition-all ${evt.reactions?.[localUser] === emoji ? 'bg-orange-500/20 border-orange-500' : 'bg-zinc-800/50 border-zinc-800 opacity-60'}`}>{emoji} <span className="font-black ml-1">{Object.values(evt.reactions || {}).filter(e => e === emoji).length || ''}</span></button>
+                        <button key={emoji} onClick={() => handleReact(evt, evt.reactions?.[localUser] === emoji ? null : emoji)} className={`px-3 py-1 rounded-full text-xs border transition-all ${evt.reactions?.[localUser] === emoji ? 'bg-orange-500/20 border-orange-500' : 'bg-zinc-800/50 border-zinc-800 opacity-60 hover:opacity-100'}`}>{emoji} <span className="font-black ml-1">{Object.values(evt.reactions || {}).filter(e => e === emoji).length || ''}</span></button>
                       ))}
                     </div>
 
@@ -856,30 +956,49 @@
                   </div>
               )}
           </div>
-          
-          {showSearchModal && <ExerciseSearchModal onClose={() => setShowSearchModal(false)} onSelect={(ex) => {setExercise(ex); setShowSearchModal(false);}} exerciseDB={exerciseDB} customExercises={customExercises} initialSearch={exercise} />}
         </div>
       );
     }
 
     function Diet({ habits, localUser }) {
-      const today = formatDate(new Date());
-      const todayHabit = habits.find(h => h.user === localUser && h.date === today) || { calories: false, protein: false, water: false, noAlcohol: false };
+      const [offset, setOffset] = useState(0);
+      
+      const selectedDateObj = new Date();
+      selectedDateObj.setDate(selectedDateObj.getDate() + offset);
+      const selectedDateStr = formatDate(selectedDateObj);
+
+      let dateLabel = "Today";
+      if (offset === -1) dateLabel = "Yesterday";
+      else if (offset < -1) dateLabel = selectedDateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+      const dayHabit = habits.find(h => h.user === localUser && h.date === selectedDateStr) || { calories: false, protein: false, water: false, noAlcohol: false };
+      
       const checks = [
         { id: 'calories', label: 'Calorie Target Hit', icon: <IconFlame size={24} />, color: 'orange' },
         { id: 'protein', label: 'Protein Goal Smashed', icon: <IconUtensils size={24} />, color: 'red' },
         { id: 'water', label: 'Hydration - 3L+', icon: <IconActivity size={24} />, color: 'blue' },
         { id: 'noAlcohol', label: 'Dry Day - No Booze', icon: <IconBan size={24} />, color: 'emerald' },
       ];
+      
       const toggle = async (id) => {
-        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'habits', `${localUser}_${today}`), { user: localUser, date: today, timestamp: Date.now(), ...todayHabit, [id]: !todayHabit[id] });
+        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'habits', `${localUser}_${selectedDateStr}`), { user: localUser, date: selectedDateStr, timestamp: Date.now(), ...dayHabit, [id]: !dayHabit[id] });
       };
+
       return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-24">
-          <h2 className="text-3xl font-black italic uppercase text-white mb-6 leading-tight">Daily Habit<br/>Accountability</h2>
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-3xl font-black italic uppercase text-white leading-tight">Daily Habit<br/>Accountability</h2>
+          </div>
+
+          <div className="flex justify-between items-center bg-zinc-900 border border-zinc-800 p-3 rounded-2xl mb-6 shadow-inner">
+             <button onClick={() => setOffset(o => o - 1)} className="p-2 bg-zinc-800 rounded-xl hover:bg-orange-500 hover:text-black transition-colors"><IconChevronLeft size={16}/></button>
+             <div className="font-black text-orange-500 uppercase tracking-widest">{dateLabel}</div>
+             <button disabled={offset === 0} onClick={() => setOffset(o => o + 1)} className="p-2 bg-zinc-800 rounded-xl hover:bg-orange-500 hover:text-black transition-colors disabled:opacity-30 disabled:hover:bg-zinc-800 disabled:hover:text-white"><IconChevronRight size={16}/></button>
+          </div>
+
           <div className="space-y-4">
             {checks.map(c => {
-              const active = todayHabit[c.id];
+              const active = dayHabit[c.id];
               return (
                 <button key={c.id} onClick={() => toggle(c.id)} className={`w-full flex items-center p-6 rounded-[2rem] border-2 transition-all active:scale-95 ${active ? `border-${c.color}-500 bg-${c.color}-500/10` : 'border-zinc-800 bg-zinc-950'}`}>
                   <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mr-5 ${active ? `bg-${c.color}-500 text-black shadow-lg shadow-${c.color}-500/20` : 'bg-zinc-900 text-zinc-600'}`}>{c.icon}</div>
@@ -891,6 +1010,182 @@
           </div>
         </div>
       );
+    }
+
+    function Recipes({ recipes, localUser }) {
+      const [showModal, setShowModal] = useState(false);
+      const [filter, setFilter] = useState('All');
+      const filters = ['All', 'Breakfast', 'Lunch', 'Dinner', 'Snack'];
+
+      const filteredRecipes = useMemo(() => {
+         let res = recipes.sort((a,b) => b.timestamp - a.timestamp);
+         if (filter !== 'All') res = res.filter(r => r.mealType === filter);
+         return res;
+      }, [recipes, filter]);
+
+      return (
+        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-24">
+          <div className="flex justify-between items-end mb-6">
+             <h2 className="text-3xl font-black italic uppercase text-white leading-tight">Nutrition<br/>& Meals</h2>
+             <button onClick={() => setShowModal(true)} className="bg-orange-500 text-black p-3 rounded-full shadow-[0_0_20px_rgba(249,115,22,0.3)] hover:scale-105 transition-all"><IconPlus size={24}/></button>
+          </div>
+
+          <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-3 mb-4 snap-x">
+             {filters.map(f => (
+                <button key={f} onClick={() => setFilter(f)} className={`whitespace-nowrap px-4 py-2 rounded-2xl text-xs font-black uppercase tracking-widest border transition-all snap-start ${filter === f ? 'bg-orange-500 text-black border-orange-400' : 'bg-zinc-900 text-zinc-500 border-zinc-800 hover:border-zinc-600'}`}>{f}</button>
+             ))}
+          </div>
+
+          <div className="space-y-5">
+             {filteredRecipes.length === 0 ? (
+                <div className="text-center p-10 bg-zinc-900/50 rounded-3xl border border-zinc-800 text-zinc-500 font-bold text-sm">No recipes found. Share your fuel!</div>
+             ) : (
+                filteredRecipes.map(r => (
+                   <div key={r.id} className="bg-zinc-900 border border-zinc-800 rounded-[2rem] overflow-hidden shadow-xl">
+                      {r.imageUrl && <img src={r.imageUrl} alt={r.title} className="w-full h-48 object-cover border-b border-zinc-800" />}
+                      <div className="p-5">
+                         <div className="flex justify-between items-start mb-2">
+                            <span className="text-[9px] font-black uppercase tracking-widest text-orange-500 bg-orange-500/10 px-2 py-1 rounded-lg">{r.mealType}</span>
+                            <span className="text-[10px] font-bold text-zinc-500">By {r.author}</span>
+                         </div>
+                         <h3 className="font-black text-xl text-white mb-3 leading-tight italic">{r.title}</h3>
+                         
+                         <div className="flex gap-3 mb-4">
+                            <div className="bg-black border border-zinc-800 rounded-xl px-3 py-2 flex-1 flex flex-col items-center justify-center">
+                               <span className="text-[9px] font-bold uppercase text-zinc-500">Calories</span>
+                               <span className="font-mono font-black text-orange-400">{r.calories || '--'}</span>
+                            </div>
+                            <div className="bg-black border border-zinc-800 rounded-xl px-3 py-2 flex-1 flex flex-col items-center justify-center">
+                               <span className="text-[9px] font-bold uppercase text-zinc-500">Protein</span>
+                               <span className="font-mono font-black text-emerald-400">{r.protein ? `${r.protein}g` : '--'}</span>
+                            </div>
+                            <div className="bg-black border border-zinc-800 rounded-xl px-3 py-2 flex-1 flex flex-col items-center justify-center">
+                               <span className="text-[9px] font-bold uppercase text-zinc-500">Time</span>
+                               <span className="font-mono font-black text-blue-400">{r.prepTime ? `${r.prepTime}m` : '--'}</span>
+                            </div>
+                         </div>
+                         
+                         {r.ingredients && (
+                           <div className="mb-4">
+                             <h4 className="text-xs font-black uppercase text-zinc-500 tracking-widest mb-1">Ingredients</h4>
+                             <p className="text-sm text-zinc-300 font-medium whitespace-pre-wrap">{r.ingredients}</p>
+                           </div>
+                         )}
+                         {r.instructions && (
+                           <div>
+                             <h4 className="text-xs font-black uppercase text-zinc-500 tracking-widest mb-1">Instructions</h4>
+                             <p className="text-sm text-zinc-400 whitespace-pre-wrap leading-relaxed">{r.instructions}</p>
+                           </div>
+                         )}
+                      </div>
+                   </div>
+                ))
+             )}
+          </div>
+
+          {showModal && <AddRecipeModal onClose={() => setShowModal(false)} localUser={localUser} />}
+        </div>
+      );
+    }
+
+    function AddRecipeModal({ onClose, localUser }) {
+       const [form, setForm] = useState({ title: '', mealType: 'Lunch', calories: '', protein: '', prepTime: '', ingredients: '', instructions: '' });
+       const [image, setImage] = useState(null);
+       const [isSaving, setIsSaving] = useState(false);
+       const fileInputRef = useRef(null);
+
+       const handleImageSelect = async (e) => {
+         const file = e.target.files[0];
+         if (!file) return;
+         try {
+            const compressedBase64 = await compressImage(file, 800);
+            setImage(compressedBase64);
+         } catch (err) { console.error("Compression failed", err); }
+       };
+
+       const handleSave = async (e) => {
+          e.preventDefault();
+          if (!form.title) return;
+          setIsSaving(true);
+          try {
+             await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'recipes'), {
+                ...form,
+                author: localUser,
+                imageUrl: image,
+                timestamp: Date.now()
+             });
+             onClose();
+          } catch(err) { console.error(err); setIsSaving(false); }
+       };
+
+       return (
+          <div className="fixed inset-0 bg-black/95 z-[70] flex flex-col p-4 animate-in fade-in backdrop-blur-md">
+            <div className="w-full max-w-md mx-auto h-full flex flex-col bg-zinc-950 border border-zinc-800 rounded-[2rem] overflow-hidden mt-2 mb-safe shadow-2xl">
+              <div className="flex justify-between items-center p-5 border-b border-zinc-900 bg-zinc-900/50">
+                <h3 className="font-black text-xl italic uppercase text-white">Add Recipe</h3>
+                <button type="button" onClick={onClose} className="p-2 bg-zinc-800 rounded-full hover:bg-zinc-700 transition-all text-zinc-400 hover:text-white"><IconX size={20}/></button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-5 space-y-5">
+                 <form id="recipeForm" onSubmit={handleSave} className="space-y-4">
+                    
+                    {image ? (
+                       <div className="relative">
+                         <img src={image} alt="Preview" className="w-full h-48 object-cover rounded-2xl border border-zinc-800" />
+                         <button type="button" onClick={() => setImage(null)} className="absolute top-2 right-2 bg-black/70 p-2 rounded-full text-white hover:text-red-500"><IconX size={16}/></button>
+                       </div>
+                    ) : (
+                       <button type="button" onClick={() => fileInputRef.current.click()} className="w-full h-32 bg-zinc-900 border-2 border-dashed border-zinc-700 rounded-2xl flex flex-col items-center justify-center text-zinc-500 hover:border-orange-500 hover:text-orange-500 transition-colors">
+                          <IconCamera size={32} className="mb-2" />
+                          <span className="text-xs font-bold uppercase tracking-widest">Upload Meal Photo</span>
+                       </button>
+                    )}
+                    <input type="file" accept="image/*" ref={fileInputRef} className="hidden" onChange={handleImageSelect} />
+
+                    <div>
+                       <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Recipe Name *</label>
+                       <input required type="text" value={form.title} onChange={e => setForm({...form, title: e.target.value})} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white font-bold outline-none focus:border-orange-500" placeholder="E.g. Anabolic Oats" />
+                    </div>
+
+                    <div>
+                       <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Meal Type</label>
+                       <select value={form.mealType} onChange={e => setForm({...form, mealType: e.target.value})} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white font-bold outline-none focus:border-orange-500 appearance-none">
+                          <option>Breakfast</option><option>Lunch</option><option>Dinner</option><option>Snack</option>
+                       </select>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2">
+                       <div>
+                          <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Cals</label>
+                          <input type="number" value={form.calories} onChange={e => setForm({...form, calories: e.target.value})} className="w-full bg-black border border-zinc-800 rounded-xl p-2 text-white font-mono text-center outline-none focus:border-orange-500" placeholder="450" />
+                       </div>
+                       <div>
+                          <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Protein (g)</label>
+                          <input type="number" value={form.protein} onChange={e => setForm({...form, protein: e.target.value})} className="w-full bg-black border border-zinc-800 rounded-xl p-2 text-white font-mono text-center outline-none focus:border-orange-500" placeholder="40" />
+                       </div>
+                       <div>
+                          <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Time (m)</label>
+                          <input type="number" value={form.prepTime} onChange={e => setForm({...form, prepTime: e.target.value})} className="w-full bg-black border border-zinc-800 rounded-xl p-2 text-white font-mono text-center outline-none focus:border-orange-500" placeholder="15" />
+                       </div>
+                    </div>
+
+                    <div>
+                       <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Ingredients</label>
+                       <textarea value={form.ingredients} onChange={e => setForm({...form, ingredients: e.target.value})} rows="3" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm text-zinc-300 outline-none focus:border-orange-500" placeholder="- 50g Oats&#10;- 1 Scoop Whey" />
+                    </div>
+                    <div>
+                       <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Instructions</label>
+                       <textarea value={form.instructions} onChange={e => setForm({...form, instructions: e.target.value})} rows="4" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm text-zinc-300 outline-none focus:border-orange-500" placeholder="1. Mix ingredients...&#10;2. Microwave for 2 mins..." />
+                    </div>
+                 </form>
+              </div>
+              <div className="p-5 border-t border-zinc-900 bg-black">
+                 <button type="submit" form="recipeForm" disabled={isSaving || !form.title} className="w-full bg-orange-500 text-black font-black uppercase tracking-widest py-4 rounded-2xl active:scale-95 transition-all text-lg italic shadow-[0_0_20px_rgba(249,115,22,0.2)] disabled:opacity-50">
+                   {isSaving ? 'Saving...' : 'Share Recipe'}
+                 </button>
+              </div>
+            </div>
+          </div>
+       );
     }
 
     function History({ workouts, habits, profiles, localUser }) {
@@ -1064,17 +1359,18 @@
 
     function NavBar({ activeTab, setActiveTab }) {
       const tabs = [
-        { id: 'hub', icon: <IconActivity size={24} />, label: 'Hub' },
-        { id: 'train', icon: <IconPlus size={24} />, label: 'Train' },
-        { id: 'diet', icon: <IconUtensils size={24} />, label: 'Habits' },
-        { id: 'history', icon: <IconCalendar size={24} />, label: 'Log' },
-        { id: 'vs', icon: <IconFlame size={24} />, label: 'VS' },
-        { id: 'profile', icon: <IconUser size={24} />, label: 'Goal' },
+        { id: 'hub', icon: <IconActivity size={20} />, label: 'Hub' },
+        { id: 'train', icon: <IconPlus size={20} />, label: 'Train' },
+        { id: 'diet', icon: <IconUtensils size={20} />, label: 'Habits' },
+        { id: 'recipes', icon: <IconBook size={20} />, label: 'Meals' },
+        { id: 'history', icon: <IconCalendar size={20} />, label: 'Log' },
+        { id: 'vs', icon: <IconFlame size={20} />, label: 'VS' },
+        { id: 'profile', icon: <IconUser size={20} />, label: 'Me' },
       ];
       return (
-        <nav className="fixed bottom-0 w-full max-w-md left-1/2 -translate-x-1/2 bg-zinc-950/90 backdrop-blur-xl border-t border-zinc-800/50 flex justify-around p-3 pb-safe z-50 shadow-[0_-10px_30px_rgba(0,0,0,0.5)]">
+        <nav className="fixed bottom-0 w-full max-w-md left-1/2 -translate-x-1/2 bg-zinc-950/95 backdrop-blur-xl border-t border-zinc-800/50 flex justify-between px-2 py-3 pb-safe z-50 shadow-[0_-10px_30px_rgba(0,0,0,0.5)]">
           {tabs.map(tab => (
-            <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex flex-col items-center gap-1.5 p-2 rounded-2xl transition-all ${activeTab === tab.id ? 'text-orange-500 scale-110' : 'text-zinc-500 hover:text-zinc-300'}`}>
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`flex flex-col items-center gap-1 p-1 rounded-xl transition-all flex-1 ${activeTab === tab.id ? 'text-orange-500 scale-110' : 'text-zinc-500 hover:text-zinc-300'}`}>
               {tab.icon} <span className="text-[8px] font-black uppercase tracking-widest">{tab.label}</span>
             </button>
           ))}
@@ -1087,8 +1383,11 @@
       const [authUser, setAuthUser] = useState(null);
       const [localUser, setLocalUser] = useState(localStorage.getItem('ts_user') || null);
       const [activeTab, setActiveTab] = useState('hub');
+      
       const [workouts, setWorkouts] = useState([]);
       const [habits, setHabits] = useState([]);
+      const [posts, setPosts] = useState([]);
+      const [recipes, setRecipes] = useState([]);
       const [profiles, setProfiles] = useState({});
       const [exerciseDB, setExerciseDB] = useState(FALLBACK_EXERCISES);
       const [customExercises, setCustomExercises] = useState([]);
@@ -1129,25 +1428,28 @@
 
         const wQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'workouts'));
         const hQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'habits'));
-        const pQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'profiles'));
+        const pQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'posts'));
+        const rQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'recipes'));
+        const profQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'profiles'));
         const cQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'custom_exercises'));
         const gDoc = doc(db, 'artifacts', appId, 'public', 'data', 'gauntlet', 'current');
 
-        const unsubW = onSnapshot(wQuery, s => setWorkouts(s.docs.map(d => ({id:d.id, ...d.data()}))), (err) => console.error("Workouts Error:", err));
-        const unsubH = onSnapshot(hQuery, s => setHabits(s.docs.map(d => ({id:d.id, ...d.data()}))), (err) => console.error("Habits Error:", err));
-        const unsubP = onSnapshot(pQuery, s => { 
+        const unsubW = onSnapshot(wQuery, s => setWorkouts(s.docs.map(d => ({id:d.id, ...d.data()}))), (err) => console.error(err));
+        const unsubH = onSnapshot(hQuery, s => setHabits(s.docs.map(d => ({id:d.id, ...d.data()}))), (err) => console.error(err));
+        const unsubP = onSnapshot(pQuery, s => setPosts(s.docs.map(d => ({id:d.id, ...d.data()}))), (err) => console.error(err));
+        const unsubR = onSnapshot(rQuery, s => setRecipes(s.docs.map(d => ({id:d.id, ...d.data()}))), (err) => console.error(err));
+        const unsubProf = onSnapshot(profQuery, s => { 
           const p={}; s.docs.forEach(d => p[d.id]=d.data()); 
           setProfiles(p); 
           setLoading(false); 
-        }, (err) => { console.error("Profiles Error:", err); setLoading(false); });
-        const unsubC = onSnapshot(cQuery, s => setCustomExercises(s.docs.map(d => ({id:d.id, ...d.data()}))), (err) => console.error("Custom Exercises Error:", err));
-        
+        }, (err) => { console.error(err); setLoading(false); });
+        const unsubC = onSnapshot(cQuery, s => setCustomExercises(s.docs.map(d => ({id:d.id, ...d.data()}))), (err) => console.error(err));
         const unsubG = onSnapshot(gDoc, (d) => {
            if (d.exists()) setGauntlet(d.data());
            else setGauntlet(null);
-        }, (err) => console.error("Gauntlet Error:", err));
+        }, (err) => console.error(err));
 
-        return () => { unsubW(); unsubH(); unsubP(); unsubC(); unsubG(); };
+        return () => { unsubW(); unsubH(); unsubP(); unsubR(); unsubProf(); unsubC(); unsubG(); };
       }, [authUser]);
 
       if (!localUser) return <WelcomeScreen onSelect={(u) => { localStorage.setItem('ts_user', u); setLocalUser(u); }} />;
@@ -1160,11 +1462,12 @@
             {activeTab === 'hub' && (
               <>
                 <Gauntlet gauntlet={gauntlet} localUser={localUser} />
-                <Feed workouts={workouts} habits={habits} localUser={localUser} />
+                <Feed workouts={workouts} habits={habits} posts={posts} localUser={localUser} />
               </>
             )}
             {activeTab === 'train' && <Train workouts={workouts} localUser={localUser} exerciseDB={exerciseDB} customExercises={customExercises} />}
             {activeTab === 'diet' && <Diet habits={habits} localUser={localUser} />}
+            {activeTab === 'recipes' && <Recipes recipes={recipes} localUser={localUser} />}
             {activeTab === 'history' && <History workouts={workouts} habits={habits} profiles={profiles} localUser={localUser} />}
             {activeTab === 'vs' && <Stats workouts={workouts} habits={habits} profiles={profiles} />}
             {activeTab === 'profile' && <Profile profiles={profiles} localUser={localUser} onLogout={() => { localStorage.removeItem('ts_user'); setLocalUser(null); }} />}
