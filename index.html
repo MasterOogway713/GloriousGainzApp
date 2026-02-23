@@ -63,7 +63,7 @@
 
     const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : defaultFirebaseConfig;
     const appId = typeof __app_id !== 'undefined' ? __app_id : 'gloriousgainzapp';
-    const apiKey = typeof __gemini_api_key !== 'undefined' ? __gemini_api_key : "";
+    const envApiKey = typeof __gemini_api_key !== 'undefined' ? __gemini_api_key : "";
     
     const firebaseApp = initializeApp(firebaseConfig);
     const auth = getAuth(firebaseApp);
@@ -1066,6 +1066,64 @@
              <button onClick={() => setShowModal(true)} className="bg-orange-500 text-black p-3 rounded-full shadow-[0_0_20px_rgba(249,115,22,0.3)] hover:scale-105 transition-all"><IconPlus size={24}/></button>
           </div>
 
+          <div className="flex gap-2 overflow-x-auto hide-scrollbar pb-3 mb-4 snap-x">
+             {filters.map(f => (
+                <button key={f} onClick={() => setFilter(f)} className={`whitespace-nowrap px-4 py-2 rounded-2xl text-xs font-black uppercase tracking-widest border transition-all snap-start ${filter === f ? 'bg-orange-500 text-black border-orange-400' : 'bg-zinc-900 text-zinc-500 border-zinc-800 hover:border-zinc-600'}`}>{f}</button>
+             ))}
+          </div>
+
+          <div className="space-y-5">
+             {filteredRecipes.length === 0 ? (
+                <div className="text-center p-10 bg-zinc-900/50 rounded-3xl border border-zinc-800 text-zinc-500 font-bold text-sm">No recipes found. Share your fuel!</div>
+             ) : (
+                filteredRecipes.map(r => (
+                   <div key={r.id} className={`bg-zinc-900 border ${r.needsReview ? 'border-orange-500/50 shadow-[0_0_20px_rgba(249,115,22,0.1)]' : 'border-zinc-800 shadow-xl'} rounded-[2rem] overflow-hidden relative`}>
+                      {r.needsReview && (
+                         <div className="absolute top-4 right-4 bg-orange-500 text-black text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full shadow-lg flex items-center gap-1 z-10">
+                            <IconAlert size={12}/> Needs Review
+                         </div>
+                      )}
+                      {r.imageUrl && <img src={r.imageUrl} alt={r.title} className="w-full h-48 object-cover border-b border-zinc-800" />}
+                      <div className="p-5">
+                         <div className="flex justify-between items-start mb-2">
+                            <span className="text-[9px] font-black uppercase tracking-widest text-orange-500 bg-orange-500/10 px-2 py-1 rounded-lg">{r.mealType}</span>
+                            <span className="text-[10px] font-bold text-zinc-500">By {r.author}</span>
+                         </div>
+                         <h3 className="font-black text-xl text-white mb-3 leading-tight italic">{r.title}</h3>
+                         
+                         <div className="flex gap-3 mb-4">
+                            <div className="bg-black border border-zinc-800 rounded-xl px-3 py-2 flex-1 flex flex-col items-center justify-center">
+                               <span className="text-[9px] font-bold uppercase text-zinc-500">Calories</span>
+                               <span className="font-mono font-black text-orange-400">{r.calories || '--'}</span>
+                            </div>
+                            <div className="bg-black border border-zinc-800 rounded-xl px-3 py-2 flex-1 flex flex-col items-center justify-center">
+                               <span className="text-[9px] font-bold uppercase text-zinc-500">Protein</span>
+                               <span className="font-mono font-black text-emerald-400">{r.protein ? `${r.protein}g` : '--'}</span>
+                            </div>
+                            <div className="bg-black border border-zinc-800 rounded-xl px-3 py-2 flex-1 flex flex-col items-center justify-center">
+                               <span className="text-[9px] font-bold uppercase text-zinc-500">Time</span>
+                               <span className="font-mono font-black text-blue-400">{r.prepTime ? `${r.prepTime}m` : '--'}</span>
+                            </div>
+                         </div>
+                         
+                         {r.ingredients && (
+                           <div className="mb-4">
+                             <h4 className="text-xs font-black uppercase text-zinc-500 tracking-widest mb-1">Ingredients</h4>
+                             <p className="text-sm text-zinc-300 font-medium whitespace-pre-wrap">{r.ingredients}</p>
+                           </div>
+                         )}
+                         {r.instructions && (
+                           <div>
+                             <h4 className="text-xs font-black uppercase text-zinc-500 tracking-widest mb-1">Instructions</h4>
+                             <p className="text-sm text-zinc-400 whitespace-pre-wrap leading-relaxed">{r.instructions}</p>
+                           </div>
+                         )}
+                      </div>
+                   </div>
+                ))
+             )}
+          </div>
+
           {showModal && <AddRecipeModal onClose={() => setShowModal(false)} localUser={localUser} appSettings={appSettings} />}
         </div>
       );
@@ -1084,7 +1142,7 @@
           if (!importText) return;
           setIsImporting(true);
           try {
-             const activeApiKey = appSettings?.geminiApiKey || apiKey;
+             const activeApiKey = appSettings?.geminiApiKey || envApiKey;
              if (activeApiKey) {
                 const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${activeApiKey}`, {
                    method: 'POST',
@@ -1095,7 +1153,7 @@
                 });
                 const data = await res.json();
                 const text = data.candidates[0].content.parts[0].text;
-                const parsed = JSON.parse(text.replace(/```json/g, '').replace(/```/g, ''));
+                const parsed = JSON.parse(text.replace(/```json/gi, '').replace(/```/g, '').trim());
                 setForm({ ...form, ...parsed });
                 setNeedsReview(true);
              } else {
@@ -1456,6 +1514,7 @@
             setSaveState('saved');
             setTimeout(() => setSaveState('idle'), 2500);
          } catch(e) {
+            console.error(e);
             setSaveState('idle');
          }
       };
@@ -1545,9 +1604,17 @@
         };
 
         const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-          if (user) setAuthUser(user);
+          if (user) {
+             setAuthUser(user);
+             setLoading(false); // Auth resolved, safe to show UI
+          }
           else initAuth();
         });
+
+        // Failsafe in case auth gets stuck or doesn't resolve cleanly
+        const failsafe = setTimeout(() => {
+           setLoading(false);
+        }, 3000);
 
         fetch(DB_URL)
           .then(res => res.json())
@@ -1557,7 +1624,10 @@
           })
           .catch(e => console.error("DB Fetch Error:", e));
 
-        return () => unsubscribeAuth();
+        return () => {
+           unsubscribeAuth();
+           clearTimeout(failsafe);
+        };
       }, []);
 
       useEffect(() => {
@@ -1579,8 +1649,7 @@
         const unsubProf = onSnapshot(profQuery, s => { 
           const p={}; s.docs.forEach(d => p[d.id]=d.data()); 
           setProfiles(p); 
-          setLoading(false); 
-        }, (err) => { console.error(err); setLoading(false); });
+        }, (err) => console.error(err));
         const unsubC = onSnapshot(cQuery, s => setCustomExercises(s.docs.map(d => ({id:d.id, ...d.data()}))), (err) => console.error(err));
         const unsubG = onSnapshot(gDoc, (d) => {
            if (d.exists()) setGauntlet(d.data());
@@ -1623,3 +1692,5 @@
   </script>
 </body>
 </html>
+
+
