@@ -1591,7 +1591,11 @@
       const [loading, setLoading] = useState(true);
 
       useEffect(() => {
-        // MUST completely await authentication before allowing any DB queries to run
+        // Ultimate Failsafe: NO MATTER WHAT, drop the loading screen after 3.5 seconds
+        const authFailsafe = setTimeout(() => {
+           setLoading(false);
+        }, 3500);
+
         const initAuth = async () => {
           try {
             if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -1601,6 +1605,7 @@
             }
           } catch (error) {
             console.error("Auth error:", error);
+            setLoading(false); // Drop loading immediately if auth strictly errors out
           }
         };
         
@@ -1618,7 +1623,10 @@
           })
           .catch(e => console.error("DB Fetch Error:", e));
 
-        return () => unsubscribeAuth();
+        return () => {
+           unsubscribeAuth();
+           clearTimeout(authFailsafe);
+        };
       }, []);
 
       useEffect(() => {
@@ -1643,7 +1651,7 @@
         const unsubProf = onSnapshot(profQuery, s => { 
           const p={}; s.docs.forEach(d => p[d.id]=d.data()); 
           setProfiles(p); 
-          setLoading(false); 
+          setLoading(false); // Successfully loaded data, drop loading screen
         }, (err) => { 
            console.error(err); 
            setLoading(false); 
@@ -1658,15 +1666,8 @@
            if (d.exists()) setAppSettings(d.data());
         }, (err) => console.error(err));
 
-        // Absolute failsafe - drops the loading screen after 4 seconds regardless
-        const loadingFailsafe = setTimeout(() => {
-           setLoading(false);
-        }, 4000);
 
-        return () => { 
-           unsubW(); unsubH(); unsubP(); unsubR(); unsubProf(); unsubC(); unsubG(); unsubS(); 
-           clearTimeout(loadingFailsafe);
-        };
+        return () => { unsubW(); unsubH(); unsubP(); unsubR(); unsubProf(); unsubC(); unsubG(); unsubS(); };
       }, [authUser]);
 
       if (!localUser) return <WelcomeScreen onSelect={(u) => { localStorage.setItem('ts_user', u); setLocalUser(u); }} />;
@@ -1699,3 +1700,5 @@
   </script>
 </body>
 </html>
+
+
