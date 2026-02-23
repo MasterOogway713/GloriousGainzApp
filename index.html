@@ -133,6 +133,8 @@
     const IconBook = ({size=24, className}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>;
     const IconChevronLeft = ({size=24, className}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>;
     const IconChevronRight = ({size=24, className}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>;
+    const IconEdit = ({size=24, className}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>;
+    const IconAlert = ({size=24, className}) => <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>;
 
     // --- HELPERS ---
     const formatDate = (dateObj) => {
@@ -408,6 +410,8 @@
       const [postText, setPostText] = useState('');
       const [postImage, setPostImage] = useState(null);
       const [isPosting, setIsPosting] = useState(false);
+      const [editingPostId, setEditingPostId] = useState(null);
+      const [editPostText, setEditPostText] = useState('');
       const fileInputRef = useRef(null);
       
       const allEvents = useMemo(() => {
@@ -489,6 +493,19 @@
          setIsPosting(false);
       };
 
+      const handleDeletePost = async (id) => {
+         if(confirm("Are you sure you want to delete this post?")) {
+            try { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'posts', id)); } catch(e) {}
+         }
+      };
+
+      const saveEditPost = async (id) => {
+         try {
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'posts', id), { text: editPostText.trim() });
+            setEditingPostId(null);
+         } catch(e) { console.error(e); }
+      };
+
       return (
         <div className="space-y-6 pb-24">
           
@@ -544,7 +561,16 @@
                         </span>
                       </div>
                     </div>
-                    <span className="text-[10px] font-bold text-zinc-600">{new Date(evt.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                    
+                    <div className="flex items-center gap-2">
+                       {isMe && evt.type === 'post' && (
+                          <div className="flex items-center gap-1.5 mr-2">
+                             <button onClick={() => { setEditingPostId(evt.id); setEditPostText(evt.text); }} className="text-zinc-600 hover:text-blue-400 transition-colors"><IconEdit size={14}/></button>
+                             <button onClick={() => handleDeletePost(evt.id)} className="text-zinc-600 hover:text-red-500 transition-colors"><IconTrash size={14}/></button>
+                          </div>
+                       )}
+                       <span className="text-[10px] font-bold text-zinc-600">{new Date(evt.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                    </div>
                   </div>
                   
                   <div className="pl-10">
@@ -557,7 +583,7 @@
                                {[...sets].reverse().map((s, i) => (
                                  <div key={s.id} className="flex flex-col gap-1">
                                    <div className="bg-zinc-950 px-3 py-1.5 rounded-xl border border-zinc-800/50 w-fit font-mono text-xs text-orange-400 font-bold">
-                                     <span className="text-zinc-500 font-sans mr-1">Set {i+1}:</span> <span className="text-white">{s.weight}kg</span> x {s.reps}
+                                     <span className="text-zinc-500 font-sans mr-1">Set {i+1}:</span> <span className="text-white">{s.weight === 'BW' ? 'BW' : `${s.weight}kg`}</span> x {s.reps}
                                    </div>
                                    {s.note && <div className="text-[10px] text-zinc-400 italic pl-1">"{s.note}"</div>}
                                  </div>
@@ -572,7 +598,17 @@
                       </div>
                     ) : (
                       <div className="space-y-3">
-                        {evt.text && <p className="text-sm font-bold text-zinc-200 whitespace-pre-wrap">{evt.text}</p>}
+                        {editingPostId === evt.id ? (
+                           <div className="flex flex-col gap-2">
+                              <textarea value={editPostText} onChange={e => setEditPostText(e.target.value)} className="w-full bg-black border border-orange-500 rounded-xl p-3 text-white text-sm outline-none" rows="2" />
+                              <div className="flex justify-end gap-2">
+                                 <button onClick={() => setEditingPostId(null)} className="text-xs font-bold text-zinc-500 px-3 py-1">Cancel</button>
+                                 <button onClick={() => saveEditPost(evt.id)} className="bg-orange-500 text-black text-xs font-black uppercase px-4 py-1.5 rounded-lg">Save</button>
+                              </div>
+                           </div>
+                        ) : (
+                           evt.text && <p className="text-sm font-bold text-zinc-200 whitespace-pre-wrap">{evt.text}</p>
+                        )}
                         {evt.imageUrl && <img src={evt.imageUrl} alt="Post attached" className="w-full max-h-80 object-cover rounded-2xl border border-zinc-800 shadow-md" />}
                       </div>
                     )}
@@ -608,7 +644,6 @@
          return [...customs, ...dbList];
       }, [exerciseDB, customExercises]);
 
-      // If an exercise was already typed in, try to open straight to its info page
       const initialEx = useMemo(() => {
          if (!initialSearch) return null;
          return allExercises.find(e => (e.name||'').toLowerCase() === initialSearch.toLowerCase());
@@ -764,12 +799,12 @@
 
       const myPB = useMemo(() => {
         const sets = workouts.filter(w => w.user === localUser && w.exercise.toLowerCase() === exercise.trim().toLowerCase());
-        return sets.length ? sets.reduce((max, curr) => curr.weight > max.weight ? curr : max, sets[0]) : null;
+        return sets.length ? sets.reduce((max, curr) => (curr.weight === 'BW' ? 0 : parseFloat(curr.weight)) > (max.weight === 'BW' ? 0 : parseFloat(max.weight)) ? curr : max, sets[0]) : null;
       }, [workouts, localUser, exercise]);
 
       const rivalPB = useMemo(() => {
         const sets = workouts.filter(w => w.user === rival && w.exercise.toLowerCase() === exercise.trim().toLowerCase());
-        return sets.length ? sets.reduce((max, curr) => curr.weight > max.weight ? curr : max, sets[0]) : null;
+        return sets.length ? sets.reduce((max, curr) => (curr.weight === 'BW' ? 0 : parseFloat(curr.weight)) > (max.weight === 'BW' ? 0 : parseFloat(max.weight)) ? curr : max, sets[0]) : null;
       }, [workouts, rival, exercise]);
 
       const handleLog = async (e) => {
@@ -781,14 +816,13 @@
           await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'workouts'), { 
              user: localUser, 
              exercise: finalEx, 
-             weight: parseFloat(weight), 
+             weight: weight.toUpperCase() === 'BW' ? 'BW' : parseFloat(weight), 
              reps: parseInt(reps, 10), 
              note: note.trim(), 
              date: today, 
              timestamp: Date.now() 
           });
           
-          // Auto-save custom exercises
           const exists = allExercises.some(ex => (ex.name || '').toLowerCase() === finalEx.toLowerCase());
           if (!exists) {
              await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'custom_exercises'), { name: finalEx });
@@ -856,7 +890,6 @@
                   </div>
                 </div>
                 
-                {/* Fast Inline Dropdown Results */}
                 {showDropdown && exercise.length > 0 && searchResults.length > 0 && (
                    <div className="absolute z-50 w-full mt-2 bg-zinc-900 border-2 border-zinc-700 rounded-2xl shadow-2xl overflow-hidden max-h-60 overflow-y-auto">
                       {searchResults.map(ex => (
@@ -888,9 +921,9 @@
                 {lastSets.length ? (
                   <div className="flex flex-col gap-2">
                     {showPastSets ? lastSets.map((s, i) => (
-                      <div key={i} className="flex justify-between text-sm text-zinc-300 font-mono font-bold bg-zinc-900/50 px-3 py-1 rounded-lg border border-zinc-800/50"><span>Set {i+1}</span> <span>{s.weight}kg x {s.reps}</span></div>
+                      <div key={i} className="flex justify-between text-sm text-zinc-300 font-mono font-bold bg-zinc-900/50 px-3 py-1 rounded-lg border border-zinc-800/50"><span>Set {i+1}</span> <span>{s.weight === 'BW' ? 'BW' : `${s.weight}kg`} x {s.reps}</span></div>
                     )) : (
-                      <div className="text-base font-black text-emerald-400 italic font-mono flex justify-between"><span>Last Session Set 1:</span> <span>{lastSets[0].weight}kg x {lastSets[0].reps}</span></div>
+                      <div className="text-base font-black text-emerald-400 italic font-mono flex justify-between"><span>Last Session Set 1:</span> <span>{lastSets[0].weight === 'BW' ? 'BW' : `${lastSets[0].weight}kg`} x {lastSets[0].reps}</span></div>
                     )}
                   </div>
                 ) : <div className="text-[11px] text-zinc-600 italic">First time logging this movement. Set the bar high.</div>}
@@ -899,18 +932,21 @@
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-blue-500/5 p-3 rounded-2xl border border-blue-500/20 text-center">
                   <span className="text-[9px] uppercase font-black text-blue-500 tracking-widest block mb-1">My PB</span>
-                  <div className="text-white font-mono text-sm font-black italic">{myPB ? `${myPB.weight}kg x ${myPB.reps}` : '--'}</div>
+                  <div className="text-white font-mono text-sm font-black italic">{myPB ? `${myPB.weight === 'BW' ? 'BW' : myPB.weight+'kg'} x ${myPB.reps}` : '--'}</div>
                 </div>
                 <div className="bg-emerald-500/5 p-3 rounded-2xl border border-emerald-500/20 text-center">
                   <span className="text-[9px] uppercase font-black text-emerald-500 tracking-widest block mb-1">{rival}'s PB</span>
-                  <div className="text-white font-mono text-sm font-black italic">{rivalPB ? `${rivalPB.weight}kg x ${rivalPB.reps}` : '--'}</div>
+                  <div className="text-white font-mono text-sm font-black italic">{rivalPB ? `${rivalPB.weight === 'BW' ? 'BW' : rivalPB.weight+'kg'} x ${rivalPB.reps}` : '--'}</div>
                 </div>
               </div>
 
               <div className="flex gap-4">
                 <div className="flex-1">
-                  <label className="text-[10px] font-black text-zinc-600 uppercase block mb-1">Weight</label>
-                  <input type="number" value={weight} onChange={e => setWeight(e.target.value)} placeholder="0.0" className="w-full bg-black border-2 border-zinc-800 rounded-2xl p-4 text-white font-mono font-black text-xl outline-none focus:border-orange-500 text-center transition-all shadow-inner" />
+                  <div className="flex justify-between items-end mb-1">
+                     <label className="text-[10px] font-black text-zinc-600 uppercase block">Weight</label>
+                     <button type="button" onClick={() => setWeight('BW')} className="text-[9px] font-black text-orange-500 uppercase tracking-widest bg-orange-500/10 px-2 py-0.5 rounded transition-all hover:bg-orange-500/20">Bodyweight</button>
+                  </div>
+                  <input type="text" inputMode="decimal" value={weight} onChange={e => setWeight(e.target.value)} placeholder="0.0 or BW" className="w-full bg-black border-2 border-zinc-800 rounded-2xl p-4 text-white font-mono font-black text-xl outline-none focus:border-orange-500 text-center transition-all shadow-inner" />
                 </div>
                 <div className="flex-[1.5] min-w-0">
                   <label className="text-[10px] font-black text-zinc-600 uppercase block mb-1">Reps</label>
@@ -930,7 +966,7 @@
                     onChange={e => setNote(e.target.value)}
                     placeholder="E.g. Felt light today..."
                     className="w-full bg-black border-2 border-zinc-800 rounded-2xl p-4 text-zinc-300 font-bold text-sm outline-none focus:border-orange-500 transition-all shadow-inner"
-                  />
+                 />
               </div>
 
               <button disabled={!weight || !exercise} className="w-full bg-orange-500 text-black font-black uppercase italic tracking-wider py-5 rounded-3xl active:scale-95 transition-all flex justify-center items-center gap-3 mt-4 shadow-[0_10px_30px_rgba(249,115,22,0.3)] disabled:opacity-50 text-lg">Log Data Point <IconPlus size={20}/></button>
@@ -947,7 +983,7 @@
                          <div key={w.id} className="flex items-center justify-between bg-zinc-900 border border-zinc-800 p-4 rounded-2xl">
                              <div>
                                  <div className="font-black text-white text-sm">{w.exercise}</div>
-                                 <div className="font-mono text-orange-500 font-bold text-xs">{w.weight}kg x {w.reps}</div>
+                                 <div className="font-mono text-orange-500 font-bold text-xs">{w.weight === 'BW' ? 'BW' : `${w.weight}kg`} x {w.reps}</div>
                                  {w.note && <div className="text-[10px] text-zinc-400 italic mt-1">"{w.note}"</div>}
                              </div>
                              <button type="button" onClick={() => handleDeleteSet(w.id)} className="text-zinc-600 hover:text-red-500 p-2 transition-colors"><IconTrash size={18}/></button>
@@ -1041,7 +1077,12 @@
                 <div className="text-center p-10 bg-zinc-900/50 rounded-3xl border border-zinc-800 text-zinc-500 font-bold text-sm">No recipes found. Share your fuel!</div>
              ) : (
                 filteredRecipes.map(r => (
-                   <div key={r.id} className="bg-zinc-900 border border-zinc-800 rounded-[2rem] overflow-hidden shadow-xl">
+                   <div key={r.id} className={`bg-zinc-900 border ${r.needsReview ? 'border-orange-500/50 shadow-[0_0_20px_rgba(249,115,22,0.1)]' : 'border-zinc-800 shadow-xl'} rounded-[2rem] overflow-hidden relative`}>
+                      {r.needsReview && (
+                         <div className="absolute top-4 right-4 bg-orange-500 text-black text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full shadow-lg flex items-center gap-1 z-10">
+                            <IconAlert size={12}/> Needs Review
+                         </div>
+                      )}
                       {r.imageUrl && <img src={r.imageUrl} alt={r.title} className="w-full h-48 object-cover border-b border-zinc-800" />}
                       <div className="p-5">
                          <div className="flex justify-between items-start mb-2">
@@ -1092,7 +1133,49 @@
        const [form, setForm] = useState({ title: '', mealType: 'Lunch', calories: '', protein: '', prepTime: '', ingredients: '', instructions: '' });
        const [image, setImage] = useState(null);
        const [isSaving, setIsSaving] = useState(false);
+       const [importText, setImportText] = useState('');
+       const [isImporting, setIsImporting] = useState(false);
+       const [needsReview, setNeedsReview] = useState(false);
        const fileInputRef = useRef(null);
+
+       const handleImport = async () => {
+          if (!importText) return;
+          setIsImporting(true);
+          try {
+             if (apiKey) {
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+                   method: 'POST',
+                   headers: { 'Content-Type': 'application/json' },
+                   body: JSON.stringify({
+                      contents: [{ parts: [{ text: `Parse this recipe into JSON with keys: title, mealType (Breakfast, Lunch, Dinner, Snack), calories (number), protein (number), prepTime (number, minutes only), ingredients (string, bulleted), instructions (string, numbered). Return ONLY valid JSON. Text: ${importText}` }] }]
+                   })
+                });
+                const data = await res.json();
+                const text = data.candidates[0].content.parts[0].text;
+                const parsed = JSON.parse(text.replace(/```json/g, '').replace(/```/g, ''));
+                setForm({ ...form, ...parsed });
+                setNeedsReview(true);
+             } else {
+                // Mock behavior if no API key is provided
+                setForm({
+                   ...form,
+                   title: "AI Generated Anabolic Chicken",
+                   mealType: "Dinner",
+                   calories: "650",
+                   protein: "55",
+                   prepTime: "25",
+                   ingredients: "- 200g Chicken Breast\n- 100g Rice\n- Sriracha to taste",
+                   instructions: "1. Cook chicken in pan.\n2. Boil rice.\n3. Combine and top with Sriracha."
+                });
+                setNeedsReview(true);
+             }
+             setImportText('');
+          } catch(e) {
+             console.error(e);
+             alert("Failed to parse recipe. Please input manually.");
+          }
+          setIsImporting(false);
+       };
 
        const handleImageSelect = async (e) => {
          const file = e.target.files[0];
@@ -1110,6 +1193,7 @@
           try {
              await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'recipes'), {
                 ...form,
+                needsReview,
                 author: localUser,
                 imageUrl: image,
                 timestamp: Date.now()
@@ -1118,16 +1202,36 @@
           } catch(err) { console.error(err); setIsSaving(false); }
        };
 
+       const inputClass = (flag) => `w-full bg-black border ${flag ? 'border-orange-500' : 'border-zinc-800'} rounded-xl p-3 text-white font-bold outline-none focus:border-orange-500 transition-colors`;
+
        return (
           <div className="fixed inset-0 bg-black/95 z-[70] flex flex-col p-4 animate-in fade-in backdrop-blur-md">
             <div className="w-full max-w-md mx-auto h-full flex flex-col bg-zinc-950 border border-zinc-800 rounded-[2rem] overflow-hidden mt-2 mb-safe shadow-2xl">
-              <div className="flex justify-between items-center p-5 border-b border-zinc-900 bg-zinc-900/50">
+              <div className="flex justify-between items-center p-5 border-b border-zinc-900 bg-zinc-900/50 shrink-0">
                 <h3 className="font-black text-xl italic uppercase text-white">Add Recipe</h3>
                 <button type="button" onClick={onClose} className="p-2 bg-zinc-800 rounded-full hover:bg-zinc-700 transition-all text-zinc-400 hover:text-white"><IconX size={20}/></button>
               </div>
-              <div className="flex-1 overflow-y-auto p-5 space-y-5">
+              <div className="flex-1 overflow-y-auto p-5 space-y-6">
+                 
+                 <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-4">
+                    <h4 className="text-[10px] font-black uppercase text-zinc-500 tracking-widest mb-2 flex items-center gap-1.5"><IconZap size={14} className="text-orange-500" /> AI Recipe Import</h4>
+                    <div className="flex flex-col gap-2">
+                       <textarea value={importText} onChange={e => setImportText(e.target.value)} rows="3" placeholder="Paste recipe text here (ingredients, instructions, etc)..." className="w-full bg-black border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-orange-500 resize-none" />
+                       <button onClick={handleImport} disabled={isImporting || !importText} className="w-full bg-zinc-800 text-white font-black uppercase text-[10px] px-3 py-2 rounded-xl hover:bg-orange-500 hover:text-black transition-colors disabled:opacity-50">{isImporting ? 'Parsing...' : 'Import from Text'}</button>
+                    </div>
+                 </div>
+
                  <form id="recipeForm" onSubmit={handleSave} className="space-y-4">
                     
+                    {needsReview && (
+                       <div className="bg-orange-500/10 border border-orange-500/30 p-3 rounded-xl flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-orange-400 flex items-center gap-1"><IconAlert size={14}/> Please review AI populated fields</span>
+                          <label className="flex items-center gap-2 text-[10px] font-black uppercase cursor-pointer">
+                             <input type="checkbox" checked={!needsReview} onChange={() => setNeedsReview(!needsReview)} className="accent-orange-500 w-4 h-4 cursor-pointer" /> Mark Reviewed
+                          </label>
+                       </div>
+                    )}
+
                     {image ? (
                        <div className="relative">
                          <img src={image} alt="Preview" className="w-full h-48 object-cover rounded-2xl border border-zinc-800" />
@@ -1143,12 +1247,12 @@
 
                     <div>
                        <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Recipe Name *</label>
-                       <input required type="text" value={form.title} onChange={e => setForm({...form, title: e.target.value})} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white font-bold outline-none focus:border-orange-500" placeholder="E.g. Anabolic Oats" />
+                       <input required type="text" value={form.title} onChange={e => setForm({...form, title: e.target.value})} className={inputClass(needsReview)} placeholder="E.g. Anabolic Oats" />
                     </div>
 
                     <div>
                        <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Meal Type</label>
-                       <select value={form.mealType} onChange={e => setForm({...form, mealType: e.target.value})} className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-white font-bold outline-none focus:border-orange-500 appearance-none">
+                       <select value={form.mealType} onChange={e => setForm({...form, mealType: e.target.value})} className={`${inputClass(needsReview)} appearance-none`}>
                           <option>Breakfast</option><option>Lunch</option><option>Dinner</option><option>Snack</option>
                        </select>
                     </div>
@@ -1156,29 +1260,29 @@
                     <div className="grid grid-cols-3 gap-2">
                        <div>
                           <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Cals</label>
-                          <input type="number" value={form.calories} onChange={e => setForm({...form, calories: e.target.value})} className="w-full bg-black border border-zinc-800 rounded-xl p-2 text-white font-mono text-center outline-none focus:border-orange-500" placeholder="450" />
+                          <input type="number" value={form.calories} onChange={e => setForm({...form, calories: e.target.value})} className={`${inputClass(needsReview)} font-mono text-center px-2`} placeholder="450" />
                        </div>
                        <div>
                           <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Protein (g)</label>
-                          <input type="number" value={form.protein} onChange={e => setForm({...form, protein: e.target.value})} className="w-full bg-black border border-zinc-800 rounded-xl p-2 text-white font-mono text-center outline-none focus:border-orange-500" placeholder="40" />
+                          <input type="number" value={form.protein} onChange={e => setForm({...form, protein: e.target.value})} className={`${inputClass(needsReview)} font-mono text-center px-2`} placeholder="40" />
                        </div>
                        <div>
                           <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Time (m)</label>
-                          <input type="number" value={form.prepTime} onChange={e => setForm({...form, prepTime: e.target.value})} className="w-full bg-black border border-zinc-800 rounded-xl p-2 text-white font-mono text-center outline-none focus:border-orange-500" placeholder="15" />
+                          <input type="number" value={form.prepTime} onChange={e => setForm({...form, prepTime: e.target.value})} className={`${inputClass(needsReview)} font-mono text-center px-2`} placeholder="15" />
                        </div>
                     </div>
 
                     <div>
                        <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Ingredients</label>
-                       <textarea value={form.ingredients} onChange={e => setForm({...form, ingredients: e.target.value})} rows="3" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm text-zinc-300 outline-none focus:border-orange-500" placeholder="- 50g Oats&#10;- 1 Scoop Whey" />
+                       <textarea value={form.ingredients} onChange={e => setForm({...form, ingredients: e.target.value})} rows="4" className={`${inputClass(needsReview)} text-sm text-zinc-300 font-normal leading-relaxed`} placeholder="- 50g Oats&#10;- 1 Scoop Whey" />
                     </div>
                     <div>
                        <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Instructions</label>
-                       <textarea value={form.instructions} onChange={e => setForm({...form, instructions: e.target.value})} rows="4" className="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm text-zinc-300 outline-none focus:border-orange-500" placeholder="1. Mix ingredients...&#10;2. Microwave for 2 mins..." />
+                       <textarea value={form.instructions} onChange={e => setForm({...form, instructions: e.target.value})} rows="5" className={`${inputClass(needsReview)} text-sm text-zinc-300 font-normal leading-relaxed`} placeholder="1. Mix ingredients...&#10;2. Microwave for 2 mins..." />
                     </div>
                  </form>
               </div>
-              <div className="p-5 border-t border-zinc-900 bg-black">
+              <div className="p-5 border-t border-zinc-900 bg-black shrink-0">
                  <button type="submit" form="recipeForm" disabled={isSaving || !form.title} className="w-full bg-orange-500 text-black font-black uppercase tracking-widest py-4 rounded-2xl active:scale-95 transition-all text-lg italic shadow-[0_0_20px_rgba(249,115,22,0.2)] disabled:opacity-50">
                    {isSaving ? 'Saving...' : 'Share Recipe'}
                  </button>
@@ -1191,15 +1295,32 @@
     function History({ workouts, habits, profiles, localUser }) {
       const [viewUser, setViewUser] = useState(localUser);
       const [currentDate, setCurrentDate] = useState(new Date());
+      const [selectedDetailDate, setSelectedDetailDate] = useState(null);
+
       const monthData = useMemo(() => {
         const w = new Set(); const d = new Set();
         workouts.forEach(x => { if(x.user === viewUser) w.add(x.date) });
         habits.forEach(x => { if(x.user === viewUser && x.calories && x.protein && x.water && x.noAlcohol) d.add(x.date) });
         return { w, d };
       }, [workouts, habits, viewUser]);
+      
       const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
       const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
       const days = Array.from({length: daysInMonth}, (_, i) => i + 1);
+
+      const detailsForSelected = useMemo(() => {
+         if (!selectedDetailDate) return null;
+         const dWorkouts = workouts.filter(w => w.user === viewUser && w.date === selectedDetailDate);
+         const dHabits = habits.find(h => h.user === viewUser && h.date === selectedDetailDate) || {};
+         
+         const groupedW = {};
+         dWorkouts.forEach(w => {
+            if(!groupedW[w.exercise]) groupedW[w.exercise] = [];
+            groupedW[w.exercise].push(w);
+         });
+
+         return { workouts: groupedW, habits: dHabits, totalSets: dWorkouts.length };
+      }, [selectedDetailDate, viewUser, workouts, habits]);
 
       return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-24">
@@ -1209,9 +1330,9 @@
           </div>
           <div className="bg-zinc-950 p-6 rounded-[2.5rem] border border-zinc-800 shadow-2xl">
              <div className="flex justify-between items-center mb-8">
-                <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))} className="p-3 bg-zinc-900 rounded-2xl border border-zinc-800 text-orange-500">←</button>
+                <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1))} className="p-3 bg-zinc-900 rounded-2xl border border-zinc-800 text-orange-500"><IconChevronLeft size={16} /></button>
                 <h3 className="font-black italic text-lg uppercase tracking-tighter">{currentDate.toLocaleString('default', { month: 'long', year:'numeric' })}</h3>
-                <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))} className="p-3 bg-zinc-900 rounded-2xl border border-zinc-800 text-orange-500">→</button>
+                <button onClick={() => setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1))} className="p-3 bg-zinc-900 rounded-2xl border border-zinc-800 text-orange-500"><IconChevronRight size={16} /></button>
              </div>
              <div className="grid grid-cols-7 gap-2 mb-4 text-center text-[10px] font-black text-zinc-700 uppercase tracking-widest">
                {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(day => <div key={day}>{day}</div>)}
@@ -1221,10 +1342,68 @@
                 {days.map(d => {
                   const ds = `${currentDate.getFullYear()}-${String(currentDate.getMonth()+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
                   const isW = monthData.w.has(ds); const isD = monthData.d.has(ds);
-                  return <div key={d} className={`aspect-square rounded-2xl flex items-center justify-center font-black text-sm relative border-2 transition-all ${isW ? 'bg-orange-500 text-black border-orange-300 shadow-[0_0_15px_rgba(249,115,22,0.3)]' : 'bg-zinc-900 text-zinc-500 border-zinc-800'}`}>{d}{isD && <div className={`absolute bottom-1 right-1 w-2.5 h-2.5 ${isW ? 'bg-white' : 'bg-blue-400'} rounded-full shadow-sm`} />}</div>
+                  return (
+                     <button 
+                        key={d} 
+                        onClick={() => { if(isW || isD || habits.some(h=>h.user===viewUser&&h.date===ds)) setSelectedDetailDate(ds) }}
+                        className={`aspect-square rounded-2xl flex items-center justify-center font-black text-sm relative border-2 transition-all ${isW ? 'bg-orange-500 text-black border-orange-300 shadow-[0_0_15px_rgba(249,115,22,0.3)]' : (isD || monthData.w.has(ds) ? 'hover:bg-zinc-800' : 'bg-zinc-900 text-zinc-500 border-zinc-800 hover:border-zinc-700 cursor-pointer')}`}
+                     >
+                        {d}
+                        {isD && <div className={`absolute bottom-1 right-1 w-2.5 h-2.5 ${isW ? 'bg-white' : 'bg-blue-400'} rounded-full shadow-sm`} />}
+                     </button>
+                  );
                 })}
              </div>
           </div>
+
+          {selectedDetailDate && detailsForSelected && (
+             <div className="fixed inset-0 bg-black/95 z-[70] p-4 flex flex-col justify-center items-center animate-in fade-in backdrop-blur-sm">
+               <div className="bg-zinc-950 border border-zinc-800 rounded-3xl w-full max-w-md p-6 relative max-h-[85vh] overflow-y-auto shadow-2xl">
+                 <button onClick={() => setSelectedDetailDate(null)} className="absolute top-5 right-5 text-zinc-500 hover:text-white"><IconX size={20}/></button>
+                 <h3 className="text-2xl font-black text-white italic mb-1">{new Date(selectedDetailDate).toLocaleDateString('en-US', {weekday:'long', month:'short', day:'numeric'})}</h3>
+                 <span className="text-[10px] font-black uppercase text-orange-500 tracking-widest">{viewUser}'s Log</span>
+                 
+                 <div className="mt-6">
+                    <h4 className="text-xs font-black uppercase text-zinc-500 tracking-widest mb-3 flex items-center gap-1.5"><IconUtensils size={14}/> Habits</h4>
+                    <div className="flex flex-wrap gap-2">
+                       {['calories','protein','water','noAlcohol'].map(h => {
+                          const achieved = detailsForSelected.habits[h];
+                          return (
+                             <div key={h} className={`px-3 py-2 rounded-xl border text-[10px] font-black uppercase tracking-widest ${achieved ? 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400' : 'bg-zinc-900 border-zinc-800 text-zinc-600'}`}>
+                                {achieved ? '✓' : '✗'} {h}
+                             </div>
+                          )
+                       })}
+                    </div>
+                 </div>
+
+                 <div className="mt-6 border-t border-zinc-800 pt-6">
+                    <h4 className="text-xs font-black uppercase text-zinc-500 tracking-widest mb-4 flex items-center gap-1.5"><IconActivity size={14}/> Workout ({detailsForSelected.totalSets} Sets)</h4>
+                    {Object.keys(detailsForSelected.workouts).length === 0 ? (
+                       <p className="text-zinc-500 text-sm font-bold">Rest Day. No sets logged.</p>
+                    ) : (
+                       <div className="space-y-4">
+                          {Object.entries(detailsForSelected.workouts).map(([ex, sets]) => (
+                             <div key={ex} className="bg-zinc-900/50 p-4 rounded-2xl border border-zinc-800/50">
+                                <div className="font-black text-white mb-2 italic underline decoration-orange-500/30 underline-offset-2">{ex}</div>
+                                <div className="space-y-1">
+                                   {sets.map((s, i) => (
+                                      <div key={s.id} className="flex items-center gap-2">
+                                         <span className="text-[10px] text-zinc-500 w-8">S {i+1}</span>
+                                         <span className="font-mono font-bold text-orange-400 text-sm">{s.weight === 'BW' ? 'BW' : `${s.weight}kg`} <span className="text-zinc-400 font-sans mx-1">x</span> {s.reps}</span>
+                                         {s.note && <span className="text-[9px] text-zinc-500 italic ml-2">"{s.note}"</span>}
+                                      </div>
+                                   ))}
+                                </div>
+                             </div>
+                          ))}
+                       </div>
+                    )}
+                 </div>
+               </div>
+             </div>
+          )}
+
         </div>
       );
     }
@@ -1241,7 +1420,7 @@
           const fourteenDaysAgo = new Date(); fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
           const pbs = workouts.filter(w => w.user === user && w.timestamp >= fourteenDaysAgo.getTime()).reduce((acc, curr) => {
               const prev = workouts.filter(w => w.user === user && w.exercise === curr.exercise && w.timestamp < curr.timestamp);
-              if (prev.length && curr.weight > Math.max(...prev.map(p => p.weight))) return acc + 1;
+              if (prev.length && (curr.weight === 'BW' ? 0 : parseFloat(curr.weight)) > Math.max(...prev.map(p => (p.weight === 'BW' ? 0 : parseFloat(p.weight))))) return acc + 1;
               return acc;
           }, 0);
           const perfDays = new Set(habits.filter(h => h.user === user && h.calories && h.protein && h.water && h.noAlcohol).map(h => h.date));
@@ -1258,8 +1437,8 @@
         for (let i = 13; i >= 0; i--) {
             const d = new Date(); d.setDate(d.getDate() - i); const ds = formatDate(d);
             labels.push(d.toLocaleDateString('en-US', { day: 'numeric', month:'short' }));
-            jVol.push(workouts.filter(w => w.user === 'Jordan' && w.date === ds).reduce((a,b) => a + (b.weight * b.reps), 0));
-            aVol.push(workouts.filter(w => w.user === 'Aaron' && w.date === ds).reduce((a,b) => a + (b.weight * b.reps), 0));
+            jVol.push(workouts.filter(w => w.user === 'Jordan' && w.date === ds).reduce((a,b) => a + ((b.weight === 'BW' ? 0 : parseFloat(b.weight)) * b.reps), 0));
+            aVol.push(workouts.filter(w => w.user === 'Aaron' && w.date === ds).reduce((a,b) => a + ((b.weight === 'BW' ? 0 : parseFloat(b.weight)) * b.reps), 0));
         }
         const ctx = document.getElementById('volumeChart'); if (window.vChartInst) window.vChartInst.destroy();
         window.vChartInst = new Chart(ctx, {
