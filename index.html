@@ -762,7 +762,7 @@
       );
     }
 
-    function Train({ workouts, localUser, exerciseDB, customExercises }) {
+        function Train({ workouts, localUser, exerciseDB, customExercises }) {
       const [activeTemplate, setActiveTemplate] = useState("Chest/Tris");
       const [exercise, setExercise] = useState(TEMPLATES["Chest/Tris"][0]);
       const [weight, setWeight] = useState('');
@@ -773,8 +773,18 @@
       const [showPastSets, setShowPastSets] = useState(false);
       const [showDropdown, setShowDropdown] = useState(false);
 
+      // --- NEW DATE SELECTION LOGIC ---
+      const [offset, setOffset] = useState(0);
+      const selectedDateObj = new Date();
+      selectedDateObj.setDate(selectedDateObj.getDate() + offset);
+      const selectedDateStr = formatDate(selectedDateObj);
+
+      let dateLabel = "Today";
+      if (offset === -1) dateLabel = "Yesterday";
+      else if (offset < -1) dateLabel = selectedDateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+      // --------------------------------
+
       const rival = localUser === 'Jordan' ? 'Aaron' : 'Jordan';
-      const today = formatDate(new Date());
 
       useEffect(() => { if (restTime > 0) { const t = setInterval(() => setRestTime(r => r - 1), 1000); return () => clearInterval(t); } }, [restTime]);
 
@@ -786,16 +796,16 @@
         return allExercises.filter(ex => (ex.name || '').toLowerCase().includes(q)).slice(0, 5);
       }, [exercise, allExercises]);
 
-      const todaysWorkouts = useMemo(() => {
-        return workouts.filter(w => w.user === localUser && w.date === today).sort((a,b) => b.timestamp - a.timestamp);
-      }, [workouts, localUser, today]);
+      const selectedWorkouts = useMemo(() => {
+        return workouts.filter(w => w.user === localUser && w.date === selectedDateStr).sort((a,b) => b.timestamp - a.timestamp);
+      }, [workouts, localUser, selectedDateStr]);
 
       const lastSets = useMemo(() => {
-        const past = workouts.filter(w => w.user === localUser && w.exercise.toLowerCase() === exercise.trim().toLowerCase() && w.date !== today).sort((a,b) => b.timestamp - a.timestamp);
+        const past = workouts.filter(w => w.user === localUser && w.exercise.toLowerCase() === exercise.trim().toLowerCase() && w.date !== selectedDateStr).sort((a,b) => b.timestamp - a.timestamp);
         if (!past.length) return [];
         const lastDate = past[0].date;
         return past.filter(p => p.date === lastDate).reverse();
-      }, [workouts, localUser, exercise, today]);
+      }, [workouts, localUser, exercise, selectedDateStr]);
 
       const myPB = useMemo(() => {
         const sets = workouts.filter(w => w.user === localUser && w.exercise.toLowerCase() === exercise.trim().toLowerCase());
@@ -819,7 +829,7 @@
              weight: weight.toUpperCase() === 'BW' ? 'BW' : parseFloat(weight), 
              reps: parseInt(reps, 10), 
              note: note.trim(), 
-             date: today, 
+             date: selectedDateStr, 
              timestamp: Date.now() 
           });
           
@@ -851,7 +861,16 @@
             <button type="button" onClick={() => setRestTime(0)} className="text-zinc-600 ml-2 hover:text-white"><IconX size={20}/></button>
           </div>}
 
-          <h2 className="text-3xl font-black italic uppercase text-white mb-6">Log Set</h2>
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-3xl font-black italic uppercase text-white leading-tight">Log Set</h2>
+          </div>
+
+          <div className="flex justify-between items-center bg-zinc-900 border border-zinc-800 p-3 rounded-2xl mb-6 shadow-inner">
+             <button onClick={() => setOffset(o => o - 1)} className="p-2 bg-zinc-800 rounded-xl hover:bg-orange-500 hover:text-black transition-colors"><IconChevronLeft size={16}/></button>
+             <div className="font-black text-orange-500 uppercase tracking-widest">{dateLabel}</div>
+             <button disabled={offset === 0} onClick={() => setOffset(o => o + 1)} className="p-2 bg-zinc-800 rounded-xl hover:bg-orange-500 hover:text-black transition-colors disabled:opacity-30 disabled:hover:bg-zinc-800 disabled:hover:text-white"><IconChevronRight size={16}/></button>
+          </div>
+
           <div className="bg-zinc-900 p-6 rounded-[2.5rem] border border-zinc-800 shadow-2xl relative overflow-visible">
             <form onSubmit={handleLog} className="space-y-5 relative z-10">
               <div>
@@ -897,10 +916,27 @@
                            key={ex.name} 
                            type="button" 
                            onClick={() => { setExercise(ex.name); setShowDropdown(false); }}
-                           className="w-full text-left px-4 py-4 border-b border-zinc-800/50 hover:bg-zinc-800 transition-all flex justify-between items-center"
+                           className="w-full text-left px-4 py-3 border-b border-zinc-800/50 hover:bg-zinc-800 transition-all flex items-center gap-3"
                          >
-                           <span className="font-black text-white text-base">{ex.name}</span>
-                           <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">{ex.category || 'Custom'}</span>
+                           <div className="w-8 h-8 rounded-lg bg-zinc-950 border border-zinc-800 overflow-hidden relative shrink-0 flex items-center justify-center">
+                             {ex.images && ex.images.length > 0 ? (
+                                <>
+                                   <img 
+                                     src={`${IMG_BASE_URL}${ex.name.replace(/ /g, '_').replace(/\//g, '_')}/0.jpg`} 
+                                     className="w-full h-full object-cover absolute inset-0 z-10"
+                                     onError={(e) => e.target.style.display = 'none'}
+                                     alt=""
+                                   />
+                                   <IconActivity size={14} className="text-zinc-600 relative z-0 opacity-50" />
+                                </>
+                             ) : (
+                                <IconActivity size={14} className="text-zinc-600" />
+                             )}
+                           </div>
+                           <div className="flex-1 flex justify-between items-center">
+                             <span className="font-black text-white text-sm">{ex.name}</span>
+                             <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest">{ex.category || 'Custom'}</span>
+                           </div>
                          </button>
                       ))}
                    </div>
@@ -974,12 +1010,14 @@
           </div>
 
           <div className="mt-8 mb-6">
-              <h3 className="text-xs font-black text-zinc-500 uppercase tracking-widest mb-4">Today's Log ({todaysWorkouts.length} Sets)</h3>
-              {todaysWorkouts.length === 0 ? (
-                  <div className="text-zinc-600 text-sm text-center py-6 border border-dashed border-zinc-800 rounded-2xl">Nothing logged today yet.</div>
+              <h3 className="text-xs font-black text-zinc-500 uppercase tracking-widest mb-4">
+                 {offset === 0 ? "Today's Log" : "Selected Date Log"} ({selectedWorkouts.length} Sets)
+              </h3>
+              {selectedWorkouts.length === 0 ? (
+                  <div className="text-zinc-600 text-sm text-center py-6 border border-dashed border-zinc-800 rounded-2xl">Nothing logged on this date yet.</div>
               ) : (
                   <div className="space-y-3">
-                     {todaysWorkouts.map(w => (
+                     {selectedWorkouts.map(w => (
                          <div key={w.id} className="flex items-center justify-between bg-zinc-900 border border-zinc-800 p-4 rounded-2xl">
                              <div>
                                  <div className="font-black text-white text-sm">{w.exercise}</div>
@@ -1006,6 +1044,7 @@
         </div>
       );
     }
+
 
     function Diet({ habits, localUser }) {
       const [offset, setOffset] = useState(0);
