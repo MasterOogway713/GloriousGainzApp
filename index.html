@@ -1607,87 +1607,202 @@
     }
 
     function Stats({ workouts, habits, profiles }) {
-      const users = ['Jordan', 'Aaron'];
       const analytics = useMemo(() => {
-        const calculate = (user) => {
-          const prof = profiles[user] || {};
-          const target = parseInt(prof.targetWorkouts || 4);
-          const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-          const workoutDays = new Set(workouts.filter(w => w.user === user && new Date(w.date) >= thirtyDaysAgo).map(w => w.date)).size;
-          const consistency = Math.min(Math.round((workoutDays / (target * 4)) * 100), 100);
-          const fourteenDaysAgo = new Date(); fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
-          const pbs = workouts.filter(w => w.user === user && w.timestamp >= fourteenDaysAgo.getTime()).reduce((acc, curr) => {
-              const prev = workouts.filter(w => w.user === user && w.exercise === curr.exercise && w.timestamp < curr.timestamp);
+        const thirtyDaysAgo = new Date(); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const fourteenDaysAgo = new Date(); fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+
+        let totalPBs = 0;
+        let combinedWorkouts30d = 0;
+        
+        const calcUser = (user) => {
+          const userWorkouts = workouts.filter(w => w.user === user);
+          combinedWorkouts30d += new Set(userWorkouts.filter(w => new Date(w.date) >= thirtyDaysAgo).map(w => w.date)).size;
+
+          const pbs = userWorkouts.filter(w => w.timestamp >= fourteenDaysAgo.getTime()).reduce((acc, curr) => {
+              const prev = userWorkouts.filter(w => w.exercise === curr.exercise && w.timestamp < curr.timestamp);
               if (prev.length && (curr.weight === 'BW' ? 0 : parseFloat(curr.weight)) > Math.max(...prev.map(p => (p.weight === 'BW' ? 0 : parseFloat(p.weight))))) return acc + 1;
               return acc;
           }, 0);
-          const perfDays = new Set(habits.filter(h => h.user === user && h.calories && h.protein && h.water && h.noAlcohol).map(h => h.date));
-          let streak = 0; let d = new Date();
-          while(perfDays.has(formatDate(d))) { streak++; d.setDate(d.getDate()-1); }
-          const readiness = Math.round((consistency * 0.4) + (streak * 4) + (pbs * 6));
-          return { consistency: isNaN(consistency) ? 0 : consistency, pbs, streak, readiness: isNaN(readiness) ? 0 : Math.min(readiness, 100) };
+          totalPBs += pbs;
         };
-        return { Jordan: calculate('Jordan'), Aaron: calculate('Aaron') };
-      }, [workouts, habits, profiles]);
+
+        calcUser('Jordan');
+        calcUser('Aaron');
+
+        // Perfect Synergy Days (both hit 4/4 habits)
+        let synergyDays = 0;
+        let currentSynergyStreak = 0;
+        let streakBroken = false;
+        const d = new Date();
+        for(let i=0; i<30; i++) {
+            const ds = formatDate(new Date(d.getTime() - i * 86400000));
+            const jHabit = habits.find(h => h.user === 'Jordan' && h.date === ds);
+            const aHabit = habits.find(h => h.user === 'Aaron' && h.date === ds);
+            const jPerfect = jHabit?.calories && jHabit?.protein && jHabit?.water && jHabit?.noAlcohol;
+            const aPerfect = aHabit?.calories && aHabit?.protein && aHabit?.water && aHabit?.noAlcohol;
+            
+            if (jPerfect && aPerfect) {
+                synergyDays++;
+                if (!streakBroken) currentSynergyStreak++;
+            } else if (i > 0) { // allow today to be incomplete without breaking streak immediately
+                streakBroken = true;
+            }
+        }
+
+        return { combinedWorkouts30d, totalPBs, synergyDays, currentSynergyStreak };
+      }, [workouts, habits]);
 
       useEffect(() => {
-        const labels = []; const jVol = []; const aVol = [];
+        // --- 1. Volume Payload Chart ---
+        const labels = []; const combinedVol = [];
         for (let i = 13; i >= 0; i--) {
             const d = new Date(); d.setDate(d.getDate() - i); const ds = formatDate(d);
             labels.push(d.toLocaleDateString('en-US', { day: 'numeric', month:'short' }));
-            jVol.push(workouts.filter(w => w.user === 'Jordan' && w.date === ds).reduce((a,b) => a + ((b.weight === 'BW' ? 0 : parseFloat(b.weight)) * b.reps), 0));
-            aVol.push(workouts.filter(w => w.user === 'Aaron' && w.date === ds).reduce((a,b) => a + ((b.weight === 'BW' ? 0 : parseFloat(b.weight)) * b.reps), 0));
+            const dailyVol = workouts.filter(w => w.date === ds).reduce((a,b) => a + ((b.weight === 'BW' ? 0 : parseFloat(b.weight)) * b.reps), 0);
+            combinedVol.push(dailyVol);
         }
-        const ctx = document.getElementById('volumeChart'); if (window.vChartInst) window.vChartInst.destroy();
-        window.vChartInst = new Chart(ctx, {
+        const ctxVol = document.getElementById('volumeChart'); if (window.vChartInst) window.vChartInst.destroy();
+        window.vChartInst = new Chart(ctxVol, {
             type: 'line',
             data: { labels, datasets: [
-                { label: 'Jordan', data: jVol, borderColor: '#3b82f6', tension: 0.4, fill: true, backgroundColor: 'rgba(59, 130, 246, 0.05)', borderWidth: 3 },
-                { label: 'Aaron', data: aVol, borderColor: '#10b981', tension: 0.4, fill: true, backgroundColor: 'rgba(16, 185, 129, 0.05)', borderWidth: 3 }
+                { label: 'Combined Payload (kg)', data: combinedVol, borderColor: '#f97316', tension: 0.4, fill: true, backgroundColor: 'rgba(249, 115, 22, 0.15)', borderWidth: 3, pointBackgroundColor: '#f97316', pointBorderColor: '#000', pointBorderWidth: 2 }
             ]},
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#18181b' }, border: {display: false}, ticks: {color: '#52525b'} }, x: { grid: { display: false }, ticks: {color: '#52525b'} } } }
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { grid: { color: '#18181b' }, border: {display: false}, ticks: {color: '#52525b', font: {family: 'monospace'}} }, x: { grid: { display: false }, ticks: {color: '#52525b', font: {family: 'monospace'}} } } }
         });
-      }, [workouts]);
 
-      const renderMetric = (label, jordanVal, aaronVal, suffix = "") => (
-        <div className="space-y-3 mb-8">
-          <div className="flex justify-between px-1"><span className="text-[10px] font-black uppercase text-zinc-500 tracking-[0.2em]">{label}</span></div>
-          <div className="space-y-4">
-            <div className="flex items-center gap-4">
-              <span className="w-12 text-[10px] font-black text-blue-500 uppercase">Jord</span>
-              <div className="flex-1 h-2.5 bg-zinc-950 rounded-full border border-zinc-800 overflow-hidden"><div className="h-full bg-blue-500 rounded-full transition-all duration-1000 shadow-[0_0_10px_rgba(59,130,246,0.5)]" style={{ width: `${Math.min(jordanVal, 100)}%` }} /></div>
-              <span className="w-10 text-xs font-mono font-black text-right text-white">{jordanVal}{suffix}</span>
-            </div>
-            <div className="flex items-center gap-4">
-              <span className="w-12 text-[10px] font-black text-emerald-500 uppercase">Aar</span>
-              <div className="flex-1 h-2.5 bg-zinc-950 rounded-full border border-zinc-800 overflow-hidden"><div className="h-full bg-emerald-500 rounded-full transition-all duration-1000 shadow-[0_0_10px_rgba(16,185,129,0.5)]" style={{ width: `${Math.min(aaronVal, 100)}%` }} /></div>
-              <span className="w-10 text-xs font-mono font-black text-right text-white">{aaronVal}{suffix}</span>
-            </div>
-          </div>
-        </div>
-      );
+        // --- 2. Habit Adherence Chart (Last 30 Days) ---
+        const habitCounts = { calories: 0, protein: 0, water: 0, noAlcohol: 0 };
+        let totalPossibleHabits = 0;
+        for (let i = 0; i < 30; i++) {
+            const d = new Date(); d.setDate(d.getDate() - i); const ds = formatDate(d);
+            ['Jordan', 'Aaron'].forEach(user => {
+                totalPossibleHabits++;
+                const h = habits.find(x => x.user === user && x.date === ds);
+                if (h) {
+                    if (h.calories) habitCounts.calories++;
+                    if (h.protein) habitCounts.protein++;
+                    if (h.water) habitCounts.water++;
+                    if (h.noAlcohol) habitCounts.noAlcohol++;
+                }
+            });
+        }
+        const habitPercentages = [
+            Math.round((habitCounts.calories / totalPossibleHabits) * 100) || 0,
+            Math.round((habitCounts.protein / totalPossibleHabits) * 100) || 0,
+            Math.round((habitCounts.water / totalPossibleHabits) * 100) || 0,
+            Math.round((habitCounts.noAlcohol / totalPossibleHabits) * 100) || 0,
+        ];
+        const ctxHabit = document.getElementById('habitChart'); if (window.hChartInst) window.hChartInst.destroy();
+        window.hChartInst = new Chart(ctxHabit, {
+            type: 'bar',
+            data: {
+                labels: ['Cals', 'Protein', 'Water', 'No Booze'],
+                datasets: [{
+                    label: 'Team Adherence %',
+                    data: habitPercentages,
+                    backgroundColor: ['#f97316', '#ef4444', '#3b82f6', '#10b981'],
+                    borderRadius: 6,
+                    borderSkipped: false
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, max: 100, grid: { color: '#18181b' }, border: {display: false}, ticks: {color: '#52525b', font: {family: 'monospace'}, callback: v => v + '%'} }, x: { grid: { display: false }, ticks: {color: '#a1a1aa', font: {family: 'sans-serif', size: 10, weight: 'bold'}} } } }
+        });
+
+        // --- 3. Muscle Group Focus Doughnut (Last 30 Days) ---
+        const categoryCounts = { "Chest/Tris": 0, "Back/Biceps": 0, "Shoulders/Abs": 0, "Legs": 0, "Other": 0 };
+        const thirtyDaysAgoTime = new Date(); thirtyDaysAgoTime.setDate(thirtyDaysAgoTime.getDate() - 30);
+        
+        // Reverse lookup mapping for exercises to splits
+        const exToCat = {};
+        Object.entries(TEMPLATES).forEach(([cat, exList]) => {
+            exList.forEach(ex => exToCat[ex.toLowerCase()] = cat);
+        });
+
+        workouts.filter(w => w.timestamp >= thirtyDaysAgoTime.getTime()).forEach(w => {
+            const cat = exToCat[w.exercise.toLowerCase()] || "Other";
+            categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+        });
+
+        const ctxMuscle = document.getElementById('muscleChart'); if (window.mChartInst) window.mChartInst.destroy();
+        window.mChartInst = new Chart(ctxMuscle, {
+            type: 'doughnut',
+            data: {
+                labels: Object.keys(categoryCounts),
+                datasets: [{
+                    data: Object.values(categoryCounts),
+                    backgroundColor: ['#f97316', '#3b82f6', '#10b981', '#eab308', '#a855f7'],
+                    borderColor: '#09090b',
+                    borderWidth: 4
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, cutout: '70%', plugins: { legend: { position: 'right', labels: { color: '#a1a1aa', font: {family: 'sans-serif', size: 10, weight: 'bold'}, usePointStyle: true, pointStyle: 'circle' } } } }
+        });
+
+      }, [workouts, habits]);
 
       return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-24">
-          <h2 className="text-3xl font-black italic uppercase text-white mb-6 leading-tight">Transformation<br/>Analytics</h2>
-          <div className="grid grid-cols-2 gap-4 mb-8">
-            {users.map(u => (
-              <div key={u} className="bg-zinc-900 border-2 border-zinc-800 p-6 rounded-[2.5rem] text-center relative overflow-hidden shadow-2xl">
-                <div className={`absolute top-0 left-0 w-full h-1.5 ${u === 'Jordan' ? 'bg-blue-500' : 'bg-emerald-500'}`} />
-                <span className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] block mb-2">{u} Score</span>
-                <div className="text-6xl font-black text-white italic tracking-tighter">{analytics[u].readiness}</div>
-                <div className="text-[11px] font-black text-orange-500 mt-2 italic">TURKEY READY</div>
-              </div>
-            ))}
+          <div className="flex items-center gap-3 mb-6">
+             <div className="w-10 h-10 bg-orange-500/10 rounded-2xl flex items-center justify-center text-orange-500">
+                <IconFlame size={20} />
+             </div>
+             <h2 className="text-3xl font-black italic uppercase text-white leading-none">Shared<br/>Triumphs</h2>
           </div>
-          <div className="bg-zinc-900/50 p-6 rounded-[2.5rem] border border-zinc-800 shadow-xl mb-8">
-             <div className="flex items-center justify-between mb-6"><h3 className="text-xs font-black uppercase text-zinc-500 tracking-[0.2em]">Volume Power Graph</h3><div className="flex gap-4"><div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-blue-500"/> <span className="text-[9px] font-black uppercase text-zinc-600">J</span></div><div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-emerald-500"/> <span className="text-[9px] font-black uppercase text-zinc-600">A</span></div></div></div>
+          
+          <div className="bg-gradient-to-br from-orange-600/20 to-orange-900/10 border border-orange-500/30 p-6 rounded-[2.5rem] text-center relative overflow-hidden shadow-[0_0_30px_rgba(249,115,22,0.15)] mb-6">
+            <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-orange-600 via-orange-400 to-orange-600" />
+            <span className="text-[10px] font-black text-orange-500 uppercase tracking-[0.2em] block mb-2">Combined Sessions (30d)</span>
+            <div className="text-7xl font-black text-white italic tracking-tighter">{analytics.combinedWorkouts30d}</div>
+            <div className="text-[11px] font-bold text-zinc-400 mt-2 uppercase tracking-widest">Putting in the work, together.</div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 mb-6">
+             <div className="bg-zinc-900 border border-zinc-800 p-5 rounded-[2rem] shadow-xl text-center flex flex-col justify-center items-center relative overflow-hidden">
+                <div className="absolute -right-2 -bottom-2 opacity-5 text-yellow-500"><IconTrophy size={60} /></div>
+                <IconTrophy size={20} className="text-yellow-500 mb-3" />
+                <span className="text-4xl font-black text-white font-mono leading-none mb-1">{analytics.totalPBs}</span>
+                <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">New PBs (14d)</span>
+             </div>
+             <div className="bg-zinc-900 border border-zinc-800 p-5 rounded-[2rem] shadow-xl text-center flex flex-col justify-center items-center relative overflow-hidden">
+                <div className="absolute -left-2 -bottom-2 opacity-5 text-emerald-500"><IconActivity size={60} /></div>
+                <IconActivity size={20} className="text-emerald-500 mb-3" />
+                <span className="text-4xl font-black text-white font-mono leading-none mb-1">{analytics.currentSynergyStreak}</span>
+                <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Diet Synergy Streak</span>
+             </div>
+          </div>
+
+          <div className="bg-zinc-900/50 p-6 rounded-[2.5rem] border border-zinc-800 shadow-xl mb-6">
+             <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xs font-black uppercase text-zinc-400 tracking-[0.2em]">Total Payload</h3>
+                <span className="text-[9px] font-black bg-zinc-800 text-zinc-400 px-2 py-1 rounded-lg uppercase tracking-widest">14 Days</span>
+             </div>
              <div className="h-48 w-full"><canvas id="volumeChart"></canvas></div>
           </div>
-          <div className="bg-zinc-900/30 p-8 rounded-[2.5rem] border border-zinc-800 shadow-xl">
-             {renderMetric("Monthly Consistency", analytics.Jordan.consistency, analytics.Aaron.consistency, "%")}
-             {renderMetric("Recent PBs Smashed", analytics.Jordan.pbs * 10, analytics.Aaron.pbs * 10, "")}
-             {renderMetric("Current Diet Streak", analytics.Jordan.streak * 10, analytics.Aaron.streak * 10, "d")}
+
+          <div className="bg-zinc-900/50 p-6 rounded-[2.5rem] border border-zinc-800 shadow-xl mb-6">
+             <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xs font-black uppercase text-zinc-400 tracking-[0.2em]">Habit Mastery</h3>
+                <span className="text-[9px] font-black bg-zinc-800 text-zinc-400 px-2 py-1 rounded-lg uppercase tracking-widest">30 Days</span>
+             </div>
+             <div className="h-48 w-full"><canvas id="habitChart"></canvas></div>
+          </div>
+
+          <div className="bg-zinc-900/50 p-6 rounded-[2.5rem] border border-zinc-800 shadow-xl mb-6">
+             <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xs font-black uppercase text-zinc-400 tracking-[0.2em]">Team Split Focus</h3>
+                <span className="text-[9px] font-black bg-zinc-800 text-zinc-400 px-2 py-1 rounded-lg uppercase tracking-widest">30 Days</span>
+             </div>
+             <div className="h-48 w-full"><canvas id="muscleChart"></canvas></div>
+          </div>
+          
+          <div className="bg-zinc-900/30 p-6 rounded-[2rem] border border-zinc-800 border-dashed text-center flex flex-col items-center gap-3">
+             <div className="flex -space-x-3">
+                <div className="w-10 h-10 rounded-full border-2 border-zinc-900 bg-blue-500/20 text-blue-500 flex items-center justify-center font-black text-sm shadow-lg">J</div>
+                <div className="w-10 h-10 rounded-full border-2 border-zinc-900 bg-emerald-500/20 text-emerald-500 flex items-center justify-center font-black text-sm shadow-lg">A</div>
+             </div>
+             <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest leading-relaxed">
+               "If you want to go fast, go alone.<br/><span className="text-white">If you want to go far, go together."</span>
+             </p>
           </div>
         </div>
       );
@@ -1837,7 +1952,7 @@
         { id: 'diet', icon: <IconUtensils size={20} />, label: 'Habits' },
         { id: 'recipes', icon: <IconBook size={20} />, label: 'Meals' },
         { id: 'history', icon: <IconCalendar size={20} />, label: 'Log' },
-        { id: 'vs', icon: <IconFlame size={20} />, label: 'VS' },
+        { id: 'vs', icon: <IconTrophy size={20} />, label: 'Team' },
         { id: 'profile', icon: <IconUser size={20} />, label: 'Me' },
       ];
       return (
