@@ -1218,6 +1218,12 @@
          return res;
       }, [recipes, filter]);
 
+      const handleMarkReviewed = async (id) => {
+         try {
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'recipes', id), { needsReview: false });
+         } catch(e) { console.error(e); }
+      };
+
       return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-24">
           <div className="flex justify-between items-end mb-6">
@@ -1238,9 +1244,9 @@
                 filteredRecipes.map(r => (
                    <div key={r.id} className={`bg-zinc-900 border ${r.needsReview ? 'border-orange-500/50 shadow-[0_0_20px_rgba(249,115,22,0.1)]' : 'border-zinc-800 shadow-xl'} rounded-[2rem] overflow-hidden relative`}>
                       {r.needsReview && (
-                         <div className="absolute top-4 right-4 bg-orange-500 text-black text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full shadow-lg flex items-center gap-1 z-10">
-                            <IconAlert size={12}/> Needs Review
-                         </div>
+                         <button onClick={() => handleMarkReviewed(r.id)} className="absolute top-4 right-4 bg-orange-500 hover:bg-orange-400 text-black text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full shadow-lg flex items-center gap-1.5 z-10 transition-all active:scale-95 cursor-pointer">
+                            <IconAlert size={14}/> Mark Reviewed
+                         </button>
                       )}
                       {r.imageUrl && <img src={r.imageUrl} alt={r.title} className="w-full h-48 object-cover border-b border-zinc-800" />}
                       <div className="p-5">
