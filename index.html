@@ -163,6 +163,21 @@
       });
     };
 
+    const sendTelegramNotification = async (appSettings, message) => {
+      const token = appSettings?.telegramToken;
+      const chatId = appSettings?.telegramChatId;
+      if (!token || !chatId) return;
+      try {
+        await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chat_id: chatId, text: message })
+        });
+      } catch (err) {
+        console.error("Telegram notification failed:", err);
+      }
+    };
+
     // --- SCREENS ---
     function WelcomeScreen({ onSelect }) {
       const whisperText = "The glorious house of gains... ".repeat(30);
@@ -193,29 +208,90 @@
     }
 
     function Header({ localUser }) {
-      const [daysLeft, setDaysLeft] = useState(0);
+      const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+      const [showModal, setShowModal] = useState(false);
+
       useEffect(() => {
         const target = new Date('2026-04-25T00:00:00').getTime();
-        const update = () => setDaysLeft(Math.floor((target - Date.now()) / (1000 * 60 * 60 * 24)));
+        const update = () => {
+          const now = Date.now();
+          const diff = target - now;
+          if (diff > 0) {
+            setTimeLeft({
+              days: Math.floor(diff / (1000 * 60 * 60 * 24)),
+              hours: Math.floor((diff / (1000 * 60 * 60)) % 24),
+              minutes: Math.floor((diff / 1000 / 60) % 60),
+              seconds: Math.floor((diff / 1000) % 60)
+            });
+          }
+        };
         update();
+        const interval = setInterval(update, 1000);
+        return () => clearInterval(interval);
       }, []);
+
       return (
-        <div className="sticky top-0 z-50 bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-800/50 px-4 py-3 flex justify-between items-center">
-          <div>
-            <h1 className="text-xl font-black italic tracking-tighter uppercase">Turkey<span className="text-orange-500">Shred</span></h1>
-            <div className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div> Live as {localUser}
+        <>
+          <div className="sticky top-0 z-50 bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-800/50 px-4 py-3 flex justify-between items-center">
+            <div>
+              <h1 className="text-xl font-black italic tracking-tighter uppercase">Turkey<span className="text-orange-500">Shred</span></h1>
+              <div className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
+                <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div> Live as {localUser}
+              </div>
             </div>
+            <button onClick={() => setShowModal(true)} className="bg-zinc-900 px-3 py-1.5 rounded-2xl border border-zinc-800 flex items-center gap-2 hover:border-orange-500 hover:bg-orange-500/10 transition-all active:scale-95 cursor-pointer">
+              <IconCalendar className="w-4 h-4 text-orange-500" />
+              <div className="text-sm font-black italic">{timeLeft.days} <span className="text-[9px] text-zinc-500">DAYS</span></div>
+            </button>
           </div>
-          <div className="bg-zinc-900 px-3 py-1.5 rounded-2xl border border-zinc-800 flex items-center gap-2">
-            <IconCalendar className="w-4 h-4 text-orange-500" />
-            <div className="text-sm font-black italic">{daysLeft} <span className="text-[9px] text-zinc-500">DAYS</span></div>
-          </div>
-        </div>
+
+          {showModal && (
+            <div className="fixed inset-0 bg-black/95 z-[100] flex flex-col items-center justify-center p-6 animate-in fade-in backdrop-blur-md" onClick={() => setShowModal(false)}>
+              <div className="bg-zinc-950 border border-orange-500/50 rounded-[3rem] p-8 max-w-sm w-full text-center shadow-[0_0_60px_rgba(249,115,22,0.2)] relative overflow-hidden" onClick={e => e.stopPropagation()}>
+                <div className="absolute inset-0 bg-gradient-to-b from-orange-500/10 to-transparent pointer-events-none"></div>
+                <button onClick={() => setShowModal(false)} className="absolute top-6 right-6 text-zinc-500 hover:text-white transition-colors z-10"><IconX size={24} /></button>
+                
+                <IconFlame size={56} className="text-orange-500 mx-auto mb-4 drop-shadow-[0_0_15px_rgba(249,115,22,0.8)]" />
+                <h2 className="text-4xl font-black italic uppercase text-white mb-1 tracking-tighter relative z-10">Turkey Shred</h2>
+                <p className="text-orange-500 font-black text-[10px] mb-8 uppercase tracking-[0.3em] relative z-10">The Clock is Ticking</p>
+                
+                <div className="grid grid-cols-4 gap-2 mb-10 relative z-10">
+                   <div className="flex flex-col bg-black border border-zinc-800 py-3 rounded-2xl shadow-inner">
+                     <span className="text-3xl font-black font-mono text-white leading-none">{timeLeft.days}</span>
+                     <span className="text-[9px] text-zinc-500 font-black uppercase tracking-widest mt-1">Days</span>
+                   </div>
+                   <div className="flex flex-col bg-black border border-zinc-800 py-3 rounded-2xl shadow-inner">
+                     <span className="text-3xl font-black font-mono text-white leading-none">{String(timeLeft.hours).padStart(2,'0')}</span>
+                     <span className="text-[9px] text-zinc-500 font-black uppercase tracking-widest mt-1">Hrs</span>
+                   </div>
+                   <div className="flex flex-col bg-black border border-zinc-800 py-3 rounded-2xl shadow-inner">
+                     <span className="text-3xl font-black font-mono text-white leading-none">{String(timeLeft.minutes).padStart(2,'0')}</span>
+                     <span className="text-[9px] text-zinc-500 font-black uppercase tracking-widest mt-1">Mins</span>
+                   </div>
+                   <div className="flex flex-col bg-orange-500/10 border border-orange-500/30 py-3 rounded-2xl shadow-inner">
+                     <span className="text-3xl font-black font-mono text-orange-500 leading-none">{String(timeLeft.seconds).padStart(2,'0')}</span>
+                     <span className="text-[9px] text-orange-500 font-black uppercase tracking-widest mt-1">Secs</span>
+                   </div>
+                </div>
+
+                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 mb-8 relative z-10">
+                   <p className="text-sm italic font-bold text-zinc-300 leading-relaxed">
+                     "Somebody is working harder than you right now.<br/>
+                     <span className="text-orange-500 font-black mt-2 inline-block">Don't let it be him."</span>
+                   </p>
+                </div>
+
+                <button onClick={() => setShowModal(false)} className="w-full bg-orange-500 text-black font-black uppercase tracking-widest py-4 rounded-2xl active:scale-95 transition-all text-sm shadow-[0_0_20px_rgba(249,115,22,0.3)] relative z-10">
+                  Back to the Grind
+                </button>
+              </div>
+            </div>
+          )}
+        </>
       );
     }
 
-    function Gauntlet({ gauntlet, localUser }) {
+    function Gauntlet({ gauntlet, localUser, appSettings }) {
       const [isComposing, setIsComposing] = useState(false);
       const [proposals, setProposals] = useState({});
       const [selectedMatch, setSelectedMatch] = useState(null);
@@ -241,6 +317,7 @@
           status: 'pending',
           timestamp: Date.now()
         });
+        sendTelegramNotification(appSettings, `🥊 ${localUser} just issued a Gauntlet challenge to ${rival}! Check the app to lock in a date.`);
         setIsComposing(false);
         setProposals({});
       };
@@ -254,6 +331,7 @@
           lockedTime: prop.time || 'TBD',
           lockedCertainty: prop.certainty
         });
+        sendTelegramNotification(appSettings, `🤝 IRON PACT SECURED: ${localUser} accepted ${rival}'s challenge for ${selectedMatch}!`);
       };
 
       const handleClear = async () => {
@@ -404,7 +482,7 @@
       return null;
     }
 
-    function Feed({ workouts, habits, posts, localUser }) {
+    function Feed({ workouts, habits, posts, localUser, appSettings }) {
       const [commentText, setCommentText] = useState({});
       const [showComments, setShowComments] = useState({});
       const [postText, setPostText] = useState('');
@@ -487,6 +565,7 @@
                imageUrl: postImage,
                timestamp: Date.now()
             });
+            sendTelegramNotification(appSettings, `💬 ${localUser} shared an update:\n"${postText.trim()}"`);
             setPostText('');
             setPostImage(null);
          } catch (err) { console.error(err); }
@@ -635,148 +714,7 @@
       );
     }
 
-    function ExerciseSearchModal({ onClose, onSelect, exerciseDB, customExercises, initialSearch }) {
-      const [searchQuery, setSearchQuery] = useState('');
-      
-      const allExercises = useMemo(() => {
-         const customs = Array.isArray(customExercises) ? customExercises.map(c => ({ name: c.name, isCustom: true })) : [];
-         const dbList = Array.isArray(exerciseDB) ? exerciseDB : [];
-         return [...customs, ...dbList];
-      }, [exerciseDB, customExercises]);
-
-      const initialEx = useMemo(() => {
-         if (!initialSearch) return null;
-         return allExercises.find(e => (e.name||'').toLowerCase() === initialSearch.toLowerCase());
-      }, [initialSearch, allExercises]);
-
-      const [selectedEx, setSelectedEx] = useState(initialEx || null);
-      
-      const results = useMemo(() => {
-        if (!searchQuery.trim()) return allExercises.slice(0, 25);
-        const q = searchQuery.toLowerCase().trim();
-        return allExercises.filter(ex => (ex.name || '').toLowerCase().includes(q)).slice(0, 30);
-      }, [searchQuery, allExercises]);
-
-      return (
-        <div className="fixed inset-0 bg-black/95 z-[70] flex flex-col p-4 animate-in fade-in backdrop-blur-md">
-          <div className="w-full max-w-md mx-auto h-full flex flex-col bg-zinc-950 border border-zinc-800 rounded-[2rem] overflow-hidden mt-2 mb-safe shadow-2xl">
-            {!selectedEx ? (
-               <>
-                 <div className="flex justify-between items-center p-5 border-b border-zinc-900 bg-zinc-900/50">
-                   <h3 className="font-black text-xl italic uppercase text-white">Gains Database</h3>
-                   <button type="button" onClick={onClose} className="p-2 bg-zinc-800 rounded-full hover:bg-zinc-700 transition-all text-zinc-400 hover:text-white"><IconX size={20}/></button>
-                 </div>
-                 <div className="p-4 border-b border-zinc-900">
-                   <input 
-                      type="text"
-                      value={searchQuery} 
-                      onChange={e => setSearchQuery(e.target.value)} 
-                      placeholder="Search hundreds of movements..." 
-                      className="w-full bg-black border border-zinc-800 rounded-2xl py-4 px-5 text-white font-bold focus:border-orange-500 outline-none shadow-inner transition-all" 
-                      autoFocus 
-                   />
-                 </div>
-                 <div className="flex-1 overflow-y-auto min-h-0 p-3 space-y-2">
-                   {results.length > 0 ? results.map(ex => (
-                     <button key={ex.name} type="button" onClick={() => setSelectedEx(ex)} className="w-full flex items-center gap-4 p-4 rounded-2xl bg-zinc-900/30 border border-zinc-800/50 hover:bg-zinc-800 transition-all text-left group">
-                       <div className="w-12 h-12 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 text-zinc-600 group-hover:text-orange-500 transition-colors overflow-hidden relative">
-                         {ex.images && ex.images.length > 0 ? (
-                            <>
-                               <img 
-                                 src={`${IMG_BASE_URL}${ex.name.replace(/ /g, '_').replace(/\//g, '_')}/0.jpg`} 
-                                 className="w-full h-full object-cover absolute inset-0 z-10"
-                                 onError={(e) => e.target.style.display = 'none'}
-                                 alt={ex.name}
-                               />
-                               <IconActivity size={20} className="relative z-0 opacity-50" />
-                            </>
-                         ) : (
-                            <IconActivity size={20} className="group-hover:text-orange-500 transition-colors" />
-                         )}
-                       </div>
-                       <div>
-                         <div className="font-black text-white italic text-lg">{ex.name}</div>
-                         <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-1">{ex.isCustom ? 'Custom Entry' : (ex.category || 'General')}</div>
-                       </div>
-                     </button>
-                   )) : (
-                     <div className="p-8 text-center flex flex-col items-center justify-center h-full">
-                        {searchQuery.trim() ? (
-                            <button type="button" onClick={async () => { 
-                               const newName = searchQuery.trim();
-                               if (!newName) return;
-                               try {
-                                  await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'custom_exercises'), { name: newName }); 
-                                  onSelect(newName);
-                                  onClose();
-                               } catch(err) { console.error(err); }
-                            }} className="bg-orange-500 text-black font-black uppercase px-6 py-4 rounded-2xl shadow-lg animate-pulse transition-all active:scale-95">
-                               Add "{searchQuery}" as Custom
-                            </button>
-                        ) : (
-                            <p className="text-zinc-500 font-bold text-sm">No exercises found.</p>
-                        )}
-                     </div>
-                   )}
-                 </div>
-               </>
-            ) : (
-               <div className="flex-1 flex flex-col min-h-0">
-                 <div className="flex justify-between items-center p-5 border-b border-zinc-900 bg-zinc-900/50">
-                   <button onClick={() => setSelectedEx(null)} className="text-orange-500 font-black uppercase tracking-widest text-sm flex items-center gap-1"><IconArrowRight size={16} className="rotate-180" /> Back</button>
-                   <button onClick={onClose} className="p-2 bg-zinc-800 rounded-full hover:bg-zinc-700 transition-all text-zinc-400 hover:text-white"><IconX size={20}/></button>
-                 </div>
-                 <div className="flex-1 overflow-y-auto p-5 space-y-6">
-                   <h2 className="text-3xl font-black text-white italic uppercase leading-tight">{selectedEx.name}</h2>
-                   
-                   {selectedEx.images && selectedEx.images.length > 0 && (
-                     <div className="flex gap-4 overflow-x-auto snap-x hide-scrollbar pb-2">
-                        {selectedEx.images.map((img, i) => (
-                          <img 
-                            key={i} 
-                            src={`${IMG_BASE_URL}${selectedEx.name.replace(/ /g, '_').replace(/\//g, '_')}/${i}.jpg`} 
-                            className="h-48 w-48 object-cover rounded-2xl border-2 border-zinc-800 shrink-0 snap-center bg-zinc-900"
-                            onError={(e) => e.target.style.display = 'none'}
-                            alt={`${selectedEx.name} form ${i+1}`}
-                          />
-                        ))}
-                     </div>
-                   )}
-
-                   <div className="grid grid-cols-2 gap-3">
-                     <div className="bg-zinc-900/50 p-4 rounded-2xl border border-zinc-800 shadow-inner">
-                       <div className="text-[10px] text-zinc-500 font-black uppercase tracking-widest mb-1">Target Muscle</div>
-                       <div className="text-orange-400 font-black capitalize text-sm">{(selectedEx.primaryMuscles || []).join(', ') || selectedEx.category || 'General'}</div>
-                     </div>
-                     <div className="bg-zinc-900/50 p-4 rounded-2xl border border-zinc-800 shadow-inner">
-                       <div className="text-[10px] text-zinc-500 font-black uppercase tracking-widest mb-1">Equipment</div>
-                       <div className="text-white font-black capitalize text-sm">{selectedEx.equipment || 'Bodyweight'}</div>
-                     </div>
-                   </div>
-
-                   {selectedEx.instructions && selectedEx.instructions.length > 0 && (
-                     <div className="bg-zinc-900/30 p-5 rounded-2xl border border-zinc-800">
-                       <h4 className="font-black text-white text-sm uppercase tracking-widest mb-4">Instructions</h4>
-                       <ol className="list-decimal pl-4 space-y-3 text-zinc-300 text-sm font-medium leading-relaxed">
-                         {selectedEx.instructions.map((step, i) => <li key={i} className="pl-2">{step}</li>)}
-                       </ol>
-                     </div>
-                   )}
-                 </div>
-                 
-                 <div className="p-5 border-t border-zinc-900 bg-black">
-                   <button onClick={() => { onSelect(selectedEx.name); onClose(); }} className="w-full bg-orange-500 text-black font-black uppercase tracking-widest py-4 rounded-2xl active:scale-95 transition-all text-lg italic shadow-[0_0_20px_rgba(249,115,22,0.2)]">
-                     Use This Exercise
-                   </button>
-                 </div>
-               </div>
-            )}
-          </div>
-        </div>
-      );
-    }
-
-    function Train({ workouts, localUser, exerciseDB, customExercises }) {
+    function Train({ workouts, localUser, exerciseDB, customExercises, appSettings }) {
       const [activeTemplate, setActiveTemplate] = useState("Chest/Tris");
       const [exercise, setExercise] = useState(TEMPLATES["Chest/Tris"][0]);
       const [weight, setWeight] = useState('');
@@ -844,6 +782,8 @@
              date: selectedDateStr, 
              timestamp: Date.now() 
           });
+
+          sendTelegramNotification(appSettings, `🔥 ${localUser} logged a set!\n🏋️‍♂️ ${finalEx}\n⚖️ ${weight.toUpperCase() === 'BW' ? 'Bodyweight' : weight+'kg'} x ${reps}${note.trim() ? '\n📝 "' + note.trim() + '"' : ''}`);
           
           const exists = allExercises.some(ex => (ex.name || '').toLowerCase() === finalEx.toLowerCase());
           if (!exists) {
@@ -1574,16 +1514,24 @@
       const prof = profiles[localUser] || {};
       const [form, setForm] = useState({ currentWeight: prof.currentWeight || '', goalWeight: prof.goalWeight || '', targetWorkouts: prof.targetWorkouts || '4', motivation: prof.motivation || '' });
       const [apiKeyValue, setApiKeyValue] = useState(appSettings?.geminiApiKey || '');
+      const [telegramToken, setTelegramToken] = useState(appSettings?.telegramToken || '');
+      const [telegramChatId, setTelegramChatId] = useState(appSettings?.telegramChatId || '');
       const [saveState, setSaveState] = useState('idle');
 
       useEffect(() => {
          setApiKeyValue(appSettings?.geminiApiKey || '');
+         setTelegramToken(appSettings?.telegramToken || '');
+         setTelegramChatId(appSettings?.telegramChatId || '');
       }, [appSettings]);
 
       const handleSave = async () => {
          setSaveState('saving');
          try { 
-            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'app_settings'), { geminiApiKey: apiKeyValue.trim() }, { merge: true });
+            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'app_settings'), { 
+                geminiApiKey: apiKeyValue.trim(),
+                telegramToken: telegramToken.trim(),
+                telegramChatId: telegramChatId.trim() 
+            }, { merge: true });
             await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', localUser), form);
             setSaveState('saved');
             setTimeout(() => setSaveState('idle'), 2500);
@@ -1610,6 +1558,18 @@
                   <span className="text-[8px] text-orange-500 font-normal normal-case">For AI Recipe Imports</span>
                </label>
                <input type="password" value={apiKeyValue} onChange={e => setApiKeyValue(e.target.value)} placeholder="AIzaSy..." className="w-full bg-black border border-zinc-800 rounded-2xl p-4 text-sm text-zinc-300 font-mono shadow-inner outline-none focus:border-orange-500 transition-all" />
+            </div>
+
+            <div className="space-y-4 pt-4 border-t border-zinc-800">
+               <h3 className="text-xs font-black text-zinc-300 uppercase tracking-widest flex items-center gap-2"><IconActivity size={14} className="text-blue-500" /> Telegram Bot Settings</h3>
+               <div className="space-y-2">
+                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block">Bot Token (From BotFather)</label>
+                  <input type="password" value={telegramToken} onChange={e => setTelegramToken(e.target.value)} placeholder="123456:ABC-DEF..." className="w-full bg-black border border-zinc-800 rounded-2xl p-4 text-sm text-zinc-300 font-mono shadow-inner outline-none focus:border-blue-500 transition-all" />
+               </div>
+               <div className="space-y-2">
+                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block">Group Chat ID</label>
+                  <input type="text" value={telegramChatId} onChange={e => setTelegramChatId(e.target.value)} placeholder="-100123456789" className="w-full bg-black border border-zinc-800 rounded-2xl p-4 text-sm text-zinc-300 font-mono shadow-inner outline-none focus:border-blue-500 transition-all" />
+               </div>
             </div>
 
             <button 
@@ -1760,11 +1720,11 @@
           <main className="p-4 max-w-md mx-auto pt-6">
             {activeTab === 'hub' && (
               <>
-                <Gauntlet gauntlet={gauntlet} localUser={localUser} />
-                <Feed workouts={workouts} habits={habits} posts={posts} localUser={localUser} />
+                <Gauntlet gauntlet={gauntlet} localUser={localUser} appSettings={appSettings} />
+                <Feed workouts={workouts} habits={habits} posts={posts} localUser={localUser} appSettings={appSettings} />
               </>
             )}
-            {activeTab === 'train' && <Train workouts={workouts} localUser={localUser} exerciseDB={exerciseDB} customExercises={customExercises} />}
+            {activeTab === 'train' && <Train workouts={workouts} localUser={localUser} exerciseDB={exerciseDB} customExercises={customExercises} appSettings={appSettings} />}
             {activeTab === 'diet' && <Diet habits={habits} localUser={localUser} />}
             {activeTab === 'recipes' && <Recipes recipes={recipes} localUser={localUser} appSettings={appSettings} />}
             {activeTab === 'history' && <History workouts={workouts} habits={habits} profiles={profiles} localUser={localUser} />}
