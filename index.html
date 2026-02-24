@@ -714,6 +714,147 @@
       );
     }
 
+    function ExerciseSearchModal({ onClose, onSelect, exerciseDB, customExercises, initialSearch }) {
+      const [searchQuery, setSearchQuery] = useState('');
+      
+      const allExercises = useMemo(() => {
+         const customs = Array.isArray(customExercises) ? customExercises.map(c => ({ name: c.name, isCustom: true })) : [];
+         const dbList = Array.isArray(exerciseDB) ? exerciseDB : [];
+         return [...customs, ...dbList];
+      }, [exerciseDB, customExercises]);
+
+      const initialEx = useMemo(() => {
+         if (!initialSearch) return null;
+         return allExercises.find(e => (e.name||'').toLowerCase() === initialSearch.toLowerCase());
+      }, [initialSearch, allExercises]);
+
+      const [selectedEx, setSelectedEx] = useState(initialEx || null);
+      
+      const results = useMemo(() => {
+        if (!searchQuery.trim()) return allExercises.slice(0, 25);
+        const q = searchQuery.toLowerCase().trim();
+        return allExercises.filter(ex => (ex.name || '').toLowerCase().includes(q)).slice(0, 30);
+      }, [searchQuery, allExercises]);
+
+      return (
+        <div className="fixed inset-0 bg-black/95 z-[70] flex flex-col p-4 animate-in fade-in backdrop-blur-md">
+          <div className="w-full max-w-md mx-auto h-full flex flex-col bg-zinc-950 border border-zinc-800 rounded-[2rem] overflow-hidden mt-2 mb-safe shadow-2xl">
+            {!selectedEx ? (
+               <>
+                 <div className="flex justify-between items-center p-5 border-b border-zinc-900 bg-zinc-900/50">
+                   <h3 className="font-black text-xl italic uppercase text-white">Gains Database</h3>
+                   <button type="button" onClick={onClose} className="p-2 bg-zinc-800 rounded-full hover:bg-zinc-700 transition-all text-zinc-400 hover:text-white"><IconX size={20}/></button>
+                 </div>
+                 <div className="p-4 border-b border-zinc-900">
+                   <input 
+                      type="text"
+                      value={searchQuery} 
+                      onChange={e => setSearchQuery(e.target.value)} 
+                      placeholder="Search hundreds of movements..." 
+                      className="w-full bg-black border border-zinc-800 rounded-2xl py-4 px-5 text-white font-bold focus:border-orange-500 outline-none shadow-inner transition-all" 
+                      autoFocus 
+                   />
+                 </div>
+                 <div className="flex-1 overflow-y-auto min-h-0 p-3 space-y-2">
+                   {results.length > 0 ? results.map(ex => (
+                     <button key={ex.name} type="button" onClick={() => setSelectedEx(ex)} className="w-full flex items-center gap-4 p-4 rounded-2xl bg-zinc-900/30 border border-zinc-800/50 hover:bg-zinc-800 transition-all text-left group">
+                       <div className="w-12 h-12 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 text-zinc-600 group-hover:text-orange-500 transition-colors overflow-hidden relative">
+                         {ex.images && ex.images.length > 0 ? (
+                            <>
+                               <img 
+                                 src={`${IMG_BASE_URL}${ex.name.replace(/ /g, '_').replace(/\//g, '_')}/0.jpg`} 
+                                 className="w-full h-full object-cover absolute inset-0 z-10"
+                                 onError={(e) => e.target.style.display = 'none'}
+                                 alt={ex.name}
+                               />
+                               <IconActivity size={20} className="relative z-0 opacity-50" />
+                            </>
+                         ) : (
+                            <IconActivity size={20} className="group-hover:text-orange-500 transition-colors" />
+                         )}
+                       </div>
+                       <div>
+                         <div className="font-black text-white italic text-lg">{ex.name}</div>
+                         <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-1">{ex.isCustom ? 'Custom Entry' : (ex.category || 'General')}</div>
+                       </div>
+                     </button>
+                   )) : (
+                     <div className="p-8 text-center flex flex-col items-center justify-center h-full">
+                        {searchQuery.trim() ? (
+                            <button type="button" onClick={async () => { 
+                               const newName = searchQuery.trim();
+                               if (!newName) return;
+                               try {
+                                  await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'custom_exercises'), { name: newName }); 
+                                  onSelect(newName);
+                                  onClose();
+                               } catch(err) { console.error(err); }
+                            }} className="bg-orange-500 text-black font-black uppercase px-6 py-4 rounded-2xl shadow-lg animate-pulse transition-all active:scale-95">
+                               Add "{searchQuery}" as Custom
+                            </button>
+                        ) : (
+                            <p className="text-zinc-500 font-bold text-sm">No exercises found.</p>
+                        )}
+                     </div>
+                   )}
+                 </div>
+               </>
+            ) : (
+               <div className="flex-1 flex flex-col min-h-0">
+                 <div className="flex justify-between items-center p-5 border-b border-zinc-900 bg-zinc-900/50">
+                   <button onClick={() => setSelectedEx(null)} className="text-orange-500 font-black uppercase tracking-widest text-sm flex items-center gap-1"><IconArrowRight size={16} className="rotate-180" /> Back</button>
+                   <button onClick={onClose} className="p-2 bg-zinc-800 rounded-full hover:bg-zinc-700 transition-all text-zinc-400 hover:text-white"><IconX size={20}/></button>
+                 </div>
+                 <div className="flex-1 overflow-y-auto p-5 space-y-6">
+                   <h2 className="text-3xl font-black text-white italic uppercase leading-tight">{selectedEx.name}</h2>
+                   
+                   {selectedEx.images && selectedEx.images.length > 0 && (
+                     <div className="flex gap-4 overflow-x-auto snap-x hide-scrollbar pb-2">
+                        {selectedEx.images.map((img, i) => (
+                          <img 
+                            key={i} 
+                            src={`${IMG_BASE_URL}${selectedEx.name.replace(/ /g, '_').replace(/\//g, '_')}/${i}.jpg`} 
+                            className="h-48 w-48 object-cover rounded-2xl border-2 border-zinc-800 shrink-0 snap-center bg-zinc-900"
+                            onError={(e) => e.target.style.display = 'none'}
+                            alt={`${selectedEx.name} form ${i+1}`}
+                          />
+                        ))}
+                     </div>
+                   )}
+
+                   <div className="grid grid-cols-2 gap-3">
+                     <div className="bg-zinc-900/50 p-4 rounded-2xl border border-zinc-800 shadow-inner">
+                       <div className="text-[10px] text-zinc-500 font-black uppercase tracking-widest mb-1">Target Muscle</div>
+                       <div className="text-orange-400 font-black capitalize text-sm">{(selectedEx.primaryMuscles || []).join(', ') || selectedEx.category || 'General'}</div>
+                     </div>
+                     <div className="bg-zinc-900/50 p-4 rounded-2xl border border-zinc-800 shadow-inner">
+                       <div className="text-[10px] text-zinc-500 font-black uppercase tracking-widest mb-1">Equipment</div>
+                       <div className="text-white font-black capitalize text-sm">{selectedEx.equipment || 'Bodyweight'}</div>
+                     </div>
+                   </div>
+
+                   {selectedEx.instructions && selectedEx.instructions.length > 0 && (
+                     <div className="bg-zinc-900/30 p-5 rounded-2xl border border-zinc-800">
+                       <h4 className="font-black text-white text-sm uppercase tracking-widest mb-4">Instructions</h4>
+                       <ol className="list-decimal pl-4 space-y-3 text-zinc-300 text-sm font-medium leading-relaxed">
+                         {selectedEx.instructions.map((step, i) => <li key={i} className="pl-2">{step}</li>)}
+                       </ol>
+                     </div>
+                   )}
+                 </div>
+                 
+                 <div className="p-5 border-t border-zinc-900 bg-black">
+                   <button onClick={() => { onSelect(selectedEx.name); onClose(); }} className="w-full bg-orange-500 text-black font-black uppercase tracking-widest py-4 rounded-2xl active:scale-95 transition-all text-lg italic shadow-[0_0_20px_rgba(249,115,22,0.2)]">
+                     Use This Exercise
+                   </button>
+                 </div>
+               </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
     function Train({ workouts, localUser, exerciseDB, customExercises, appSettings }) {
       const [activeTemplate, setActiveTemplate] = useState("Chest/Tris");
       const [exercise, setExercise] = useState(TEMPLATES["Chest/Tris"][0]);
@@ -1145,7 +1286,7 @@
           try {
              const activeApiKey = appSettings?.geminiApiKey || envApiKey;
              if (activeApiKey) {
-                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${activeApiKey}`, {
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${activeApiKey}`, {
                    method: 'POST',
                    headers: { 'Content-Type': 'application/json' },
                    body: JSON.stringify({
@@ -1552,7 +1693,7 @@
          }
          setGeminiTest({ status: 'testing', msg: '' });
          try {
-            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKeyValue.trim()}`, {
+            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKeyValue.trim()}`, {
                method: 'POST',
                headers: { 'Content-Type': 'application/json' },
                body: JSON.stringify({ contents: [{ parts: [{ text: "Reply with the word 'OK'" }] }] })
