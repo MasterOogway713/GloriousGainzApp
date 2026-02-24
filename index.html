@@ -992,6 +992,17 @@
                   </div>
               )}
           </div>
+          
+          {showSearchModal && (
+             <ExerciseSearchModal 
+                onClose={() => setShowSearchModal(false)} 
+                onSelect={(exName) => { setExercise(exName); setShowSearchModal(false); }} 
+                exerciseDB={exerciseDB} 
+                customExercises={customExercises} 
+                initialSearch={exercise}
+             />
+          )}
+
         </div>
       );
     }
@@ -1707,3 +1718,5 @@
   </script>
 </body>
 </html>
+
+
