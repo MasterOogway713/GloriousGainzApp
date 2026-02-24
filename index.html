@@ -163,16 +163,33 @@
       });
     };
 
-    const sendTelegramNotification = async (appSettings, message) => {
+    const sendTelegramNotification = async (appSettings, message, base64Image = null) => {
       const token = appSettings?.telegramToken;
       const chatId = appSettings?.telegramChatId;
       if (!token || !chatId) return;
+
       try {
-        await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chat_id: chatId, text: message })
-        });
+        if (base64Image) {
+          // Telegram expects multipart form data for file uploads
+          const fetchRes = await fetch(base64Image);
+          const blob = await fetchRes.blob();
+          
+          const formData = new FormData();
+          formData.append('chat_id', chatId);
+          formData.append('photo', blob, 'post.jpg');
+          formData.append('caption', message);
+
+          await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+            method: 'POST',
+            body: formData
+          });
+        } else {
+          await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: chatId, text: message })
+          });
+        }
       } catch (err) {
         console.error("Telegram notification failed:", err);
       }
@@ -565,7 +582,7 @@
                imageUrl: postImage,
                timestamp: Date.now()
             });
-            sendTelegramNotification(appSettings, `💬 ${localUser} shared an update:\n"${postText.trim()}"`);
+            sendTelegramNotification(appSettings, `💬 ${localUser} shared an update:\n"${postText.trim()}"`, postImage);
             setPostText('');
             setPostImage(null);
          } catch (err) { console.error(err); }
@@ -758,7 +775,7 @@
                  <div className="flex-1 overflow-y-auto min-h-0 p-3 space-y-2">
                    {results.length > 0 ? results.map(ex => (
                      <button key={ex.name} type="button" onClick={() => setSelectedEx(ex)} className="w-full flex items-center gap-4 p-4 rounded-2xl bg-zinc-900/30 border border-zinc-800/50 hover:bg-zinc-800 transition-all text-left group">
-                       <div className="w-12 h-12 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 text-zinc-600 group-hover:text-orange-500 transition-colors overflow-hidden relative">
+                       <div className="w-12 h-12 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 text-zinc-600 group-hover:border-orange-500 transition-colors overflow-hidden relative">
                          {ex.images && ex.images.length > 0 ? (
                             <>
                                <img 
