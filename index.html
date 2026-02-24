@@ -1517,8 +1517,9 @@
       const [telegramToken, setTelegramToken] = useState(appSettings?.telegramToken || '');
       const [telegramChatId, setTelegramChatId] = useState(appSettings?.telegramChatId || '');
       const [saveState, setSaveState] = useState('idle');
-      const [geminiTestStatus, setGeminiTestStatus] = useState('idle');
-      const [telegramTestStatus, setTelegramTestStatus] = useState('idle');
+      
+      const [geminiTest, setGeminiTest] = useState({ status: 'idle', msg: '' });
+      const [telegramTest, setTelegramTest] = useState({ status: 'idle', msg: '' });
 
       useEffect(() => {
          setApiKeyValue(appSettings?.geminiApiKey || '');
@@ -1545,47 +1546,53 @@
 
       const testGemini = async () => {
          if (!apiKeyValue.trim()) {
-            setGeminiTestStatus('error');
-            setTimeout(() => setGeminiTestStatus('idle'), 3000);
+            setGeminiTest({ status: 'error', msg: 'Key is empty' });
+            setTimeout(() => setGeminiTest({ status: 'idle', msg: '' }), 4000);
             return;
          }
-         setGeminiTestStatus('testing');
+         setGeminiTest({ status: 'testing', msg: '' });
          try {
             const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKeyValue.trim()}`, {
                method: 'POST',
                headers: { 'Content-Type': 'application/json' },
                body: JSON.stringify({ contents: [{ parts: [{ text: "Reply with the word 'OK'" }] }] })
             });
-            if (!res.ok) throw new Error("Invalid API Key");
-            setGeminiTestStatus('success');
-            setTimeout(() => setGeminiTestStatus('idle'), 3000);
+            if (!res.ok) {
+               const errData = await res.json().catch(() => ({}));
+               throw new Error(errData?.error?.message || `HTTP Error ${res.status}`);
+            }
+            setGeminiTest({ status: 'success', msg: '' });
+            setTimeout(() => setGeminiTest({ status: 'idle', msg: '' }), 4000);
          } catch (e) {
             console.error("Gemini test failed:", e);
-            setGeminiTestStatus('error');
-            setTimeout(() => setGeminiTestStatus('idle'), 3000);
+            setGeminiTest({ status: 'error', msg: e.message === "Failed to fetch" ? "Network blocked by browser/ad-blocker" : e.message });
+            setTimeout(() => setGeminiTest({ status: 'idle', msg: '' }), 6000);
          }
       };
 
       const testTelegram = async () => {
          if (!telegramToken.trim() || !telegramChatId.trim()) {
-            setTelegramTestStatus('error');
-            setTimeout(() => setTelegramTestStatus('idle'), 3000);
+            setTelegramTest({ status: 'error', msg: 'Token or Chat ID empty' });
+            setTimeout(() => setTelegramTest({ status: 'idle', msg: '' }), 4000);
             return;
          }
-         setTelegramTestStatus('testing');
+         setTelegramTest({ status: 'testing', msg: '' });
          try {
             const res = await fetch(`https://api.telegram.org/bot${telegramToken.trim()}/sendMessage`, {
                method: 'POST',
                headers: { 'Content-Type': 'application/json' },
                body: JSON.stringify({ chat_id: telegramChatId.trim(), text: "🤖 Test message from Turkey Shred '26 App! Your bot is correctly linked." })
             });
-            if (!res.ok) throw new Error("Invalid Token or Chat ID");
-            setTelegramTestStatus('success');
-            setTimeout(() => setTelegramTestStatus('idle'), 3000);
+            if (!res.ok) {
+               const errData = await res.json().catch(() => ({}));
+               throw new Error(errData?.description || `HTTP Error ${res.status}`);
+            }
+            setTelegramTest({ status: 'success', msg: '' });
+            setTimeout(() => setTelegramTest({ status: 'idle', msg: '' }), 4000);
          } catch (e) {
             console.error("Telegram test failed:", e);
-            setTelegramTestStatus('error');
-            setTimeout(() => setTelegramTestStatus('idle'), 3000);
+            setTelegramTest({ status: 'error', msg: e.message === "Failed to fetch" ? "Network blocked by browser/ad-blocker" : e.message });
+            setTimeout(() => setTelegramTest({ status: 'idle', msg: '' }), 6000);
          }
       };
 
@@ -1606,8 +1613,8 @@
                   <span className="text-[8px] text-orange-500 font-normal normal-case">For AI Recipe Imports</span>
                </label>
                <input type="password" value={apiKeyValue} onChange={e => setApiKeyValue(e.target.value)} placeholder="AIzaSy..." className="w-full bg-black border border-zinc-800 rounded-2xl p-4 text-sm text-zinc-300 font-mono shadow-inner outline-none focus:border-orange-500 transition-all" />
-               <button type="button" onClick={testGemini} disabled={geminiTestStatus === 'testing'} className={`w-full font-black uppercase text-[10px] py-3 rounded-xl transition-all ${geminiTestStatus === 'success' ? 'bg-emerald-500/20 text-emerald-400' : geminiTestStatus === 'error' ? 'bg-red-500/20 text-red-400' : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700'}`}>
-                  {geminiTestStatus === 'idle' ? 'Test Gemini Key' : geminiTestStatus === 'testing' ? 'Testing...' : geminiTestStatus === 'success' ? 'Tested OK! ✓' : 'Test Failed ✗'}
+               <button type="button" onClick={testGemini} disabled={geminiTest.status === 'testing'} className={`w-full font-black uppercase text-[10px] py-3 rounded-xl transition-all ${geminiTest.status === 'success' ? 'bg-emerald-500/20 text-emerald-400' : geminiTest.status === 'error' ? 'bg-red-500/20 text-red-400' : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700'}`}>
+                  {geminiTest.status === 'idle' ? 'Test Gemini Key' : geminiTest.status === 'testing' ? 'Testing...' : geminiTest.status === 'success' ? 'Tested OK! ✓' : `✗ ${geminiTest.msg}`}
                </button>
             </div>
 
@@ -1621,8 +1628,8 @@
                   <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest block">Group Chat ID</label>
                   <input type="text" value={telegramChatId} onChange={e => setTelegramChatId(e.target.value)} placeholder="-100123456789" className="w-full bg-black border border-zinc-800 rounded-2xl p-4 text-sm text-zinc-300 font-mono shadow-inner outline-none focus:border-blue-500 transition-all" />
                </div>
-               <button type="button" onClick={testTelegram} disabled={telegramTestStatus === 'testing'} className={`w-full font-black uppercase text-[10px] py-3 rounded-xl transition-all mt-1 ${telegramTestStatus === 'success' ? 'bg-emerald-500/20 text-emerald-400' : telegramTestStatus === 'error' ? 'bg-red-500/20 text-red-400' : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700'}`}>
-                  {telegramTestStatus === 'idle' ? 'Test Telegram Bot' : telegramTestStatus === 'testing' ? 'Sending...' : telegramTestStatus === 'success' ? 'Message Sent! ✓' : 'Test Failed ✗'}
+               <button type="button" onClick={testTelegram} disabled={telegramTest.status === 'testing'} className={`w-full font-black uppercase text-[10px] py-3 rounded-xl transition-all mt-1 ${telegramTest.status === 'success' ? 'bg-emerald-500/20 text-emerald-400' : telegramTest.status === 'error' ? 'bg-red-500/20 text-red-400' : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700'}`}>
+                  {telegramTest.status === 'idle' ? 'Test Telegram Bot' : telegramTest.status === 'testing' ? 'Sending...' : telegramTest.status === 'success' ? 'Message Sent! ✓' : `✗ ${telegramTest.msg}`}
                </button>
             </div>
 
