@@ -679,7 +679,21 @@
                  <div className="flex-1 overflow-y-auto min-h-0 p-3 space-y-2">
                    {results.length > 0 ? results.map(ex => (
                      <button key={ex.name} type="button" onClick={() => setSelectedEx(ex)} className="w-full flex items-center gap-4 p-4 rounded-2xl bg-zinc-900/30 border border-zinc-800/50 hover:bg-zinc-800 transition-all text-left group">
-                       <div className="w-12 h-12 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 text-zinc-600 group-hover:text-orange-500 transition-colors"><IconActivity size={20}/></div>
+                       <div className="w-12 h-12 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 text-zinc-600 group-hover:text-orange-500 transition-colors overflow-hidden relative">
+                         {ex.images && ex.images.length > 0 ? (
+                            <>
+                               <img 
+                                 src={`${IMG_BASE_URL}${ex.name.replace(/ /g, '_').replace(/\//g, '_')}/0.jpg`} 
+                                 className="w-full h-full object-cover absolute inset-0 z-10"
+                                 onError={(e) => e.target.style.display = 'none'}
+                                 alt={ex.name}
+                               />
+                               <IconActivity size={20} className="relative z-0 opacity-50" />
+                            </>
+                         ) : (
+                            <IconActivity size={20} className="group-hover:text-orange-500 transition-colors" />
+                         )}
+                       </div>
                        <div>
                          <div className="font-black text-white italic text-lg">{ex.name}</div>
                          <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mt-1">{ex.isCustom ? 'Custom Entry' : (ex.category || 'General')}</div>
@@ -762,7 +776,7 @@
       );
     }
 
-        function Train({ workouts, localUser, exerciseDB, customExercises }) {
+    function Train({ workouts, localUser, exerciseDB, customExercises }) {
       const [activeTemplate, setActiveTemplate] = useState("Chest/Tris");
       const [exercise, setExercise] = useState(TEMPLATES["Chest/Tris"][0]);
       const [weight, setWeight] = useState('');
@@ -773,7 +787,6 @@
       const [showPastSets, setShowPastSets] = useState(false);
       const [showDropdown, setShowDropdown] = useState(false);
 
-      // --- NEW DATE SELECTION LOGIC ---
       const [offset, setOffset] = useState(0);
       const selectedDateObj = new Date();
       selectedDateObj.setDate(selectedDateObj.getDate() + offset);
@@ -782,7 +795,6 @@
       let dateLabel = "Today";
       if (offset === -1) dateLabel = "Yesterday";
       else if (offset < -1) dateLabel = selectedDateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-      // --------------------------------
 
       const rival = localUser === 'Jordan' ? 'Aaron' : 'Jordan';
 
@@ -866,9 +878,9 @@
           </div>
 
           <div className="flex justify-between items-center bg-zinc-900 border border-zinc-800 p-3 rounded-2xl mb-6 shadow-inner">
-             <button onClick={() => setOffset(o => o - 1)} className="p-2 bg-zinc-800 rounded-xl hover:bg-orange-500 hover:text-black transition-colors"><IconChevronLeft size={16}/></button>
+             <button type="button" onClick={() => setOffset(o => o - 1)} className="p-2 bg-zinc-800 rounded-xl hover:bg-orange-500 hover:text-black transition-colors"><IconChevronLeft size={16}/></button>
              <div className="font-black text-orange-500 uppercase tracking-widest">{dateLabel}</div>
-             <button disabled={offset === 0} onClick={() => setOffset(o => o + 1)} className="p-2 bg-zinc-800 rounded-xl hover:bg-orange-500 hover:text-black transition-colors disabled:opacity-30 disabled:hover:bg-zinc-800 disabled:hover:text-white"><IconChevronRight size={16}/></button>
+             <button type="button" disabled={offset === 0} onClick={() => setOffset(o => o + 1)} className="p-2 bg-zinc-800 rounded-xl hover:bg-orange-500 hover:text-black transition-colors disabled:opacity-30 disabled:hover:bg-zinc-800 disabled:hover:text-white"><IconChevronRight size={16}/></button>
           </div>
 
           <div className="bg-zinc-900 p-6 rounded-[2.5rem] border border-zinc-800 shadow-2xl relative overflow-visible">
@@ -1045,7 +1057,6 @@
       );
     }
 
-
     function Diet({ habits, localUser }) {
       const [offset, setOffset] = useState(0);
       
@@ -1198,18 +1209,31 @@
                    method: 'POST',
                    headers: { 'Content-Type': 'application/json' },
                    body: JSON.stringify({
-                      contents: [{ parts: [{ text: `Parse this recipe into JSON with keys: title, mealType (Breakfast, Lunch, Dinner, Snack), calories (number), protein (number), prepTime (number, minutes only), ingredients (string, bulleted), instructions (string, numbered). Return ONLY valid JSON. Text: ${importText}` }] }]
+                      contents: [{ parts: [{ text: `Parse this recipe into JSON with keys: title (string), mealType (choose one: Breakfast, Lunch, Dinner, Snack), calories (number or ""), protein (number or ""), prepTime (number minutes only or ""), ingredients (string, bulleted), instructions (string, numbered). Return ONLY valid JSON. Text: ${importText}` }] }],
+                      generationConfig: {
+                         responseMimeType: "application/json"
+                      }
                    })
                 });
+                
                 const data = await res.json();
-                const text = data.candidates[0].content.parts[0].text;
-                const parsed = JSON.parse(text.replace(/```json/gi, '').replace(/```/g, '').trim());
-                setForm({ ...form, ...parsed });
+                
+                if (!res.ok) {
+                    throw new Error(data.error?.message || "API key or network error");
+                }
+
+                const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (!text) throw new Error("No response from AI");
+
+                const cleanedText = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+                const parsed = JSON.parse(cleanedText);
+                
+                setForm(prev => ({ ...prev, ...parsed }));
                 setNeedsReview(true);
              } else {
                 // Mock behavior if no API key is provided
-                setForm({
-                   ...form,
+                setForm(prev => ({
+                   ...prev,
                    title: "AI Generated Anabolic Chicken",
                    mealType: "Dinner",
                    calories: "650",
@@ -1217,13 +1241,13 @@
                    prepTime: "25",
                    ingredients: "- 200g Chicken Breast\n- 100g Rice\n- Sriracha to taste",
                    instructions: "1. Cook chicken in pan.\n2. Boil rice.\n3. Combine and top with Sriracha."
-                });
+                }));
                 setNeedsReview(true);
              }
              setImportText('');
           } catch(e) {
-             console.error(e);
-             alert("Failed to parse recipe. Please input manually.");
+             console.error("AI Import Error:", e);
+             alert(`AI Import Failed: ${e.message}. Please check your API key and try again.`);
           }
           setIsImporting(false);
        };
@@ -1757,5 +1781,3 @@
   </script>
 </body>
 </html>
-
-
