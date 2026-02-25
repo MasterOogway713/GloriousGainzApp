@@ -170,15 +170,12 @@
 
       try {
         if (base64Image) {
-          // Telegram expects multipart form data for file uploads
           const fetchRes = await fetch(base64Image);
           const blob = await fetchRes.blob();
-          
           const formData = new FormData();
           formData.append('chat_id', chatId);
           formData.append('photo', blob, 'post.jpg');
           formData.append('caption', message);
-
           await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
             method: 'POST',
             body: formData
@@ -632,7 +629,7 @@
                    <IconCamera size={20} /> Attach Photo
                  </button>
                  <button 
-                    onClick={submitPost}
+                     onClick={submitPost}
                     disabled={isPosting || (!postText.trim() && !postImage)}
                     className="bg-orange-500 text-black px-6 py-2 rounded-xl font-black uppercase text-xs tracking-widest active:scale-95 transition-all disabled:opacity-50 disabled:scale-100 shadow-md"
                  >
@@ -1556,6 +1553,11 @@
       const [editSetReps, setEditSetReps] = useState('');
       const [editSetNote, setEditSetNote] = useState('');
 
+      const [addingSetToEx, setAddingSetToEx] = useState(null);
+      const [newSetWeight, setNewSetWeight] = useState('');
+      const [newSetReps, setNewSetReps] = useState('');
+      const [newSetNote, setNewSetNote] = useState('');
+
       useEffect(() => {
           if (calendarDateToOpen) {
               setViewUser(localUser);
@@ -1608,6 +1610,25 @@
                note: editSetNote.trim()
             });
             setEditingSetId(null);
+         } catch(e) { console.error(e); }
+      };
+
+      const saveNewSet = async (exerciseName) => {
+         if (!newSetWeight || !newSetReps) return;
+         try {
+            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'workouts'), {
+               user: localUser,
+               exercise: exerciseName,
+               weight: newSetWeight.toUpperCase() === 'BW' ? 'BW' : parseFloat(newSetWeight),
+               reps: parseInt(newSetReps, 10),
+               note: newSetNote.trim(),
+               date: selectedDetailDate,
+               timestamp: Date.now()
+            });
+            setAddingSetToEx(null);
+            setNewSetWeight('');
+            setNewSetReps('');
+            setNewSetNote('');
          } catch(e) { console.error(e); }
       };
 
@@ -1712,6 +1733,30 @@
                                          )}
                                       </div>
                                    ))}
+
+                                   {/* Add new set section inline */}
+                                   {viewUser === localUser && addingSetToEx === ex ? (
+                                      <div className="bg-zinc-950 border border-emerald-500 rounded-xl p-3 flex flex-col gap-2 mt-2">
+                                         <div className="flex gap-2">
+                                            <input value={newSetWeight} onChange={e=>setNewSetWeight(e.target.value)} placeholder="Wt/BW" className="w-1/2 bg-black border border-zinc-700 rounded-lg p-2 text-xs font-mono text-white outline-none focus:border-emerald-500" />
+                                            <input value={newSetReps} type="number" onChange={e=>setNewSetReps(e.target.value)} placeholder="Reps" className="w-1/2 bg-black border border-zinc-700 rounded-lg p-2 text-xs font-mono text-white outline-none focus:border-emerald-500" />
+                                         </div>
+                                         <input value={newSetNote} onChange={e=>setNewSetNote(e.target.value)} placeholder="Note" className="w-full bg-black border border-zinc-700 rounded-lg p-2 text-xs text-white outline-none focus:border-emerald-500" />
+                                         <div className="flex justify-end gap-2 mt-1">
+                                            <button onClick={() => setAddingSetToEx(null)} className="text-xs font-bold text-zinc-500 px-2 py-1">Cancel</button>
+                                            <button onClick={() => saveNewSet(ex)} className="bg-emerald-500 text-black text-xs font-black uppercase px-3 py-1 rounded-lg">Add Set</button>
+                                         </div>
+                                      </div>
+                                   ) : viewUser === localUser ? (
+                                      <button onClick={() => {
+                                         setAddingSetToEx(ex);
+                                         setNewSetWeight('');
+                                         setNewSetReps('');
+                                         setNewSetNote('');
+                                      }} className="mt-3 w-full py-2 rounded-xl border border-dashed border-zinc-700 text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:text-white hover:border-zinc-500 transition-colors flex items-center justify-center gap-1">
+                                         <IconPlus size={12}/> Add Set
+                                      </button>
+                                   ) : null}
                                 </div>
                              </div>
                           ))}
