@@ -334,7 +334,7 @@
           status: 'pending',
           timestamp: Date.now()
         });
-        sendTelegramNotification(appSettings, `🥊 ${localUser} just issued a Gauntlet challenge to ${rival}! Check the app to lock in a date.`);
+        sendTelegramNotification(appSettings, `🥊 @${localUser} just issued a Gauntlet challenge to @${rival}! Check the app to lock in a date.`);
         setIsComposing(false);
         setProposals({});
       };
@@ -348,7 +348,7 @@
           lockedTime: prop.time || 'TBD',
           lockedCertainty: prop.certainty
         });
-        sendTelegramNotification(appSettings, `🤝 IRON PACT SECURED: ${localUser} accepted ${rival}'s challenge for ${selectedMatch}!`);
+        sendTelegramNotification(appSettings, `🤝 IRON PACT SECURED: @${localUser} accepted @${rival}'s challenge for ${selectedMatch}!`);
       };
 
       const handleClear = async () => {
@@ -499,7 +499,7 @@
       return null;
     }
 
-    function Feed({ workouts, habits, posts, localUser, appSettings }) {
+    function Feed({ workouts, habits, posts, localUser, appSettings, setActiveTab, setCalendarDateToOpen }) {
       const [commentText, setCommentText] = useState({});
       const [showComments, setShowComments] = useState({});
       const [postText, setPostText] = useState('');
@@ -559,6 +559,10 @@
         const docId = evt.type === 'workoutGroup' ? evt.primaryDocId : evt.id;
         try {
           await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', col, docId), { comments: arrayUnion({ user: localUser, text: txt.trim(), timestamp: Date.now() }) });
+          
+          const typeStr = evt.type === 'workoutGroup' ? 'session post' : (evt.type === 'habit' ? 'habit check-in' : 'update');
+          sendTelegramNotification(appSettings, `💬 @${localUser} left a comment on @${evt.user}'s ${typeStr}:\n"${txt.trim()}"`);
+
           setCommentText({ ...commentText, [evt.id]: '' });
         } catch(e) {}
       };
@@ -582,7 +586,7 @@
                imageUrl: postImage,
                timestamp: Date.now()
             });
-            sendTelegramNotification(appSettings, `💬 ${localUser} shared an update:\n"${postText.trim()}"`, postImage);
+            sendTelegramNotification(appSettings, `💬 @${localUser} shared an update:\n"${postText.trim()}"`, postImage);
             setPostText('');
             setPostImage(null);
          } catch (err) { console.error(err); }
@@ -659,6 +663,11 @@
                     </div>
                     
                     <div className="flex items-center gap-2">
+                       {isMe && evt.type === 'workoutGroup' && (
+                          <div className="flex items-center gap-1.5 mr-2">
+                             <button onClick={() => { setCalendarDateToOpen(evt.date); setActiveTab('history'); }} className="text-zinc-600 hover:text-blue-400 transition-colors"><IconEdit size={14}/></button>
+                          </div>
+                       )}
                        {isMe && evt.type === 'post' && (
                           <div className="flex items-center gap-1.5 mr-2">
                              <button onClick={() => { setEditingPostId(evt.id); setEditPostText(evt.text); }} className="text-zinc-600 hover:text-blue-400 transition-colors"><IconEdit size={14}/></button>
@@ -775,7 +784,7 @@
                  <div className="flex-1 overflow-y-auto min-h-0 p-3 space-y-2">
                    {results.length > 0 ? results.map(ex => (
                      <button key={ex.name} type="button" onClick={() => setSelectedEx(ex)} className="w-full flex items-center gap-4 p-4 rounded-2xl bg-zinc-900/30 border border-zinc-800/50 hover:bg-zinc-800 transition-all text-left group">
-                       <div className="w-12 h-12 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 text-zinc-600 group-hover:border-orange-500 transition-colors overflow-hidden relative">
+                       <div className="w-12 h-12 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center shrink-0 text-zinc-600 group-hover:text-orange-500 transition-colors overflow-hidden relative">
                          {ex.images && ex.images.length > 0 ? (
                             <>
                                <img 
@@ -941,7 +950,7 @@
              timestamp: Date.now() 
           });
 
-          sendTelegramNotification(appSettings, `🔥 ${localUser} logged a set!\n🏋️‍♂️ ${finalEx}\n⚖️ ${weight.toUpperCase() === 'BW' ? 'Bodyweight' : weight+'kg'} x ${reps}${note.trim() ? '\n📝 "' + note.trim() + '"' : ''}`);
+          sendTelegramNotification(appSettings, `🔥 @${localUser} logged a set!\n🏋️‍♂️ ${finalEx}\n⚖️ ${weight.toUpperCase() === 'BW' ? 'Bodyweight' : weight+'kg'} x ${reps}${note.trim() ? '\n📝 "' + note.trim() + '"' : ''}`);
           
           const exists = allExercises.some(ex => (ex.name || '').toLowerCase() === finalEx.toLowerCase());
           if (!exists) {
@@ -953,9 +962,9 @@
       };
 
       const handleDeleteSet = async (id) => {
-         try {
-            await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'workouts', id));
-         } catch(err) {}
+         if(confirm("Are you sure you want to delete this set?")) {
+            try { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'workouts', id)); } catch(err) {}
+         }
       };
 
       const suggestedExercises = useMemo(() => {
@@ -963,6 +972,22 @@
         const getLast = (ex) => { const m = workouts.filter(w => w.user === localUser && w.exercise === ex); return m.length ? Math.max(...m.map(w => w.timestamp)) : 0; };
         return [...baseList].sort((a, b) => getLast(b) - getLast(a));
       }, [activeTemplate, workouts, localUser]);
+
+      const [editingSetId, setEditingSetId] = useState(null);
+      const [editSetWeight, setEditSetWeight] = useState('');
+      const [editSetReps, setEditSetReps] = useState('');
+      const [editSetNote, setEditSetNote] = useState('');
+
+      const saveSetEdit = async (id) => {
+         try {
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'workouts', id), {
+               weight: editSetWeight.toUpperCase() === 'BW' ? 'BW' : parseFloat(editSetWeight),
+               reps: parseInt(editSetReps, 10),
+               note: editSetNote.trim()
+            });
+            setEditingSetId(null);
+         } catch(e) { console.error(e); }
+      };
 
       return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-24">
@@ -1127,14 +1152,39 @@
                   <div className="text-zinc-600 text-sm text-center py-6 border border-dashed border-zinc-800 rounded-2xl">Nothing logged on this date yet.</div>
               ) : (
                   <div className="space-y-3">
-                     {selectedWorkouts.map(w => (
-                         <div key={w.id} className="flex items-center justify-between bg-zinc-900 border border-zinc-800 p-4 rounded-2xl">
-                             <div>
-                                 <div className="font-black text-white text-sm">{w.exercise}</div>
-                                 <div className="font-mono text-orange-500 font-bold text-xs">{w.weight === 'BW' ? 'BW' : `${w.weight}kg`} x {w.reps}</div>
-                                 {w.note && <div className="text-[10px] text-zinc-400 italic mt-1">"{w.note}"</div>}
-                             </div>
-                             <button type="button" onClick={() => handleDeleteSet(w.id)} className="text-zinc-600 hover:text-red-500 p-2 transition-colors"><IconTrash size={18}/></button>
+                     {selectedWorkouts.map((w, index) => (
+                         <div key={w.id} className="bg-zinc-900 border border-zinc-800 p-4 rounded-2xl">
+                             {editingSetId === w.id ? (
+                                <div className="flex flex-col gap-2">
+                                   <div className="font-black text-white text-sm mb-1">{w.exercise}</div>
+                                   <div className="flex gap-2">
+                                      <input value={editSetWeight} onChange={e=>setEditSetWeight(e.target.value)} placeholder="Wt/BW" className="w-1/2 bg-black border border-zinc-700 rounded-lg p-2 text-xs font-mono text-white outline-none focus:border-orange-500" />
+                                      <input value={editSetReps} type="number" onChange={e=>setEditSetReps(e.target.value)} placeholder="Reps" className="w-1/2 bg-black border border-zinc-700 rounded-lg p-2 text-xs font-mono text-white outline-none focus:border-orange-500" />
+                                   </div>
+                                   <input value={editSetNote} onChange={e=>setEditSetNote(e.target.value)} placeholder="Note" className="w-full bg-black border border-zinc-700 rounded-lg p-2 text-xs text-white outline-none focus:border-orange-500" />
+                                   <div className="flex justify-end gap-2 mt-1">
+                                      <button type="button" onClick={() => setEditingSetId(null)} className="text-xs font-bold text-zinc-500 px-2 py-1">Cancel</button>
+                                      <button type="button" onClick={() => saveSetEdit(w.id)} className="bg-orange-500 text-black text-xs font-black uppercase px-3 py-1 rounded-lg">Save</button>
+                                   </div>
+                                </div>
+                             ) : (
+                                <div className="flex items-center justify-between">
+                                   <div>
+                                       <div className="font-black text-white text-sm">{w.exercise}</div>
+                                       <div className="font-mono text-orange-500 font-bold text-xs">{w.weight === 'BW' ? 'BW' : `${w.weight}kg`} x {w.reps}</div>
+                                       {w.note && <div className="text-[10px] text-zinc-400 italic mt-1">"{w.note}"</div>}
+                                   </div>
+                                   <div className="flex items-center gap-2">
+                                      <button type="button" onClick={() => {
+                                         setEditingSetId(w.id);
+                                         setEditSetWeight(w.weight === 'BW' ? 'BW' : w.weight.toString());
+                                         setEditSetReps(w.reps.toString());
+                                         setEditSetNote(w.note || '');
+                                      }} className="text-zinc-600 hover:text-blue-400 p-2 transition-colors"><IconEdit size={16}/></button>
+                                      <button type="button" onClick={() => handleDeleteSet(w.id)} className="text-zinc-600 hover:text-red-500 p-2 transition-colors"><IconTrash size={16}/></button>
+                                   </div>
+                                </div>
+                             )}
                          </div>
                      ))}
                   </div>
@@ -1155,7 +1205,7 @@
       );
     }
 
-    function Diet({ habits, localUser }) {
+    function Diet({ habits, localUser, appSettings }) {
       const [offset, setOffset] = useState(0);
       
       const selectedDateObj = new Date();
@@ -1176,7 +1226,13 @@
       ];
       
       const toggle = async (id) => {
-        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'habits', `${localUser}_${selectedDateStr}`), { user: localUser, date: selectedDateStr, timestamp: Date.now(), ...dayHabit, [id]: !dayHabit[id] });
+        const active = dayHabit[id];
+        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'habits', `${localUser}_${selectedDateStr}`), { user: localUser, date: selectedDateStr, timestamp: Date.now(), ...dayHabit, [id]: !active });
+        
+        if (!active) {
+            const check = checks.find(c => c.id === id);
+            sendTelegramNotification(appSettings, `✅ @${localUser} just checked off '${check.label}' for ${dateLabel}!`);
+        }
       };
 
       return (
@@ -1490,10 +1546,25 @@
        );
     }
 
-    function History({ workouts, habits, profiles, localUser }) {
+    function History({ workouts, habits, profiles, localUser, calendarDateToOpen, setCalendarDateToOpen }) {
       const [viewUser, setViewUser] = useState(localUser);
       const [currentDate, setCurrentDate] = useState(new Date());
       const [selectedDetailDate, setSelectedDetailDate] = useState(null);
+
+      const [editingSetId, setEditingSetId] = useState(null);
+      const [editSetWeight, setEditSetWeight] = useState('');
+      const [editSetReps, setEditSetReps] = useState('');
+      const [editSetNote, setEditSetNote] = useState('');
+
+      useEffect(() => {
+          if (calendarDateToOpen) {
+              setViewUser(localUser);
+              const [y, m, d] = calendarDateToOpen.split('-');
+              setCurrentDate(new Date(y, m - 1, d));
+              setSelectedDetailDate(calendarDateToOpen);
+              setCalendarDateToOpen(null);
+          }
+      }, [calendarDateToOpen, localUser, setCalendarDateToOpen]);
 
       const monthData = useMemo(() => {
         const w = new Set(); const d = new Set();
@@ -1508,7 +1579,7 @@
 
       const detailsForSelected = useMemo(() => {
          if (!selectedDetailDate) return null;
-         const dWorkouts = workouts.filter(w => w.user === viewUser && w.date === selectedDetailDate);
+         const dWorkouts = workouts.filter(w => w.user === viewUser && w.date === selectedDetailDate).sort((a,b) => b.timestamp - a.timestamp);
          const dHabits = habits.find(h => h.user === viewUser && h.date === selectedDetailDate) || {};
          
          const groupedW = {};
@@ -1517,8 +1588,28 @@
             groupedW[w.exercise].push(w);
          });
 
+         // Reverse the arrays so set 1 is first 
+         Object.keys(groupedW).forEach(k => groupedW[k] = groupedW[k].reverse());
+
          return { workouts: groupedW, habits: dHabits, totalSets: dWorkouts.length };
       }, [selectedDetailDate, viewUser, workouts, habits]);
+
+      const deleteSet = async (id) => {
+         if(confirm("Are you sure you want to delete this set?")) {
+            try { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'workouts', id)); } catch(e) {}
+         }
+      };
+
+      const saveSetEdit = async (id) => {
+         try {
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'workouts', id), {
+               weight: editSetWeight.toUpperCase() === 'BW' ? 'BW' : parseFloat(editSetWeight),
+               reps: parseInt(editSetReps, 10),
+               note: editSetNote.trim()
+            });
+            setEditingSetId(null);
+         } catch(e) { console.error(e); }
+      };
 
       return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-24">
@@ -1584,12 +1675,41 @@
                           {Object.entries(detailsForSelected.workouts).map(([ex, sets]) => (
                              <div key={ex} className="bg-zinc-900/50 p-4 rounded-2xl border border-zinc-800/50">
                                 <div className="font-black text-white mb-2 italic underline decoration-orange-500/30 underline-offset-2">{ex}</div>
-                                <div className="space-y-1">
+                                <div className="space-y-2">
                                    {sets.map((s, i) => (
-                                      <div key={s.id} className="flex items-center gap-2">
-                                         <span className="text-[10px] text-zinc-500 w-8">S {i+1}</span>
-                                         <span className="font-mono font-bold text-orange-400 text-sm">{s.weight === 'BW' ? 'BW' : `${s.weight}kg`} <span className="text-zinc-400 font-sans mx-1">x</span> {s.reps}</span>
-                                         {s.note && <span className="text-[9px] text-zinc-500 italic ml-2">"{s.note}"</span>}
+                                      <div key={s.id} className="flex flex-col">
+                                         {editingSetId === s.id ? (
+                                            <div className="bg-zinc-950 border border-orange-500 rounded-xl p-3 flex flex-col gap-2">
+                                               <div className="flex gap-2">
+                                                  <input value={editSetWeight} onChange={e=>setEditSetWeight(e.target.value)} placeholder="Wt/BW" className="w-1/2 bg-black border border-zinc-700 rounded-lg p-2 text-xs font-mono text-white outline-none focus:border-orange-500" />
+                                                  <input value={editSetReps} type="number" onChange={e=>setEditSetReps(e.target.value)} placeholder="Reps" className="w-1/2 bg-black border border-zinc-700 rounded-lg p-2 text-xs font-mono text-white outline-none focus:border-orange-500" />
+                                               </div>
+                                               <input value={editSetNote} onChange={e=>setEditSetNote(e.target.value)} placeholder="Note" className="w-full bg-black border border-zinc-700 rounded-lg p-2 text-xs text-white outline-none focus:border-orange-500" />
+                                               <div className="flex justify-end gap-2 mt-1">
+                                                  <button onClick={() => setEditingSetId(null)} className="text-xs font-bold text-zinc-500 px-2 py-1">Cancel</button>
+                                                  <button onClick={() => saveSetEdit(s.id)} className="bg-orange-500 text-black text-xs font-black uppercase px-3 py-1 rounded-lg">Save</button>
+                                               </div>
+                                            </div>
+                                         ) : (
+                                            <div className="flex items-center justify-between">
+                                               <div className="flex items-center gap-2">
+                                                  <span className="text-[10px] text-zinc-500 w-8">S {i+1}</span>
+                                                  <span className="font-mono font-bold text-orange-400 text-sm">{s.weight === 'BW' ? 'BW' : `${s.weight}kg`} <span className="text-zinc-400 font-sans mx-1">x</span> {s.reps}</span>
+                                                  {s.note && <span className="text-[9px] text-zinc-500 italic ml-2">"{s.note}"</span>}
+                                               </div>
+                                               {viewUser === localUser && (
+                                                  <div className="flex items-center gap-2">
+                                                     <button onClick={() => {
+                                                        setEditingSetId(s.id);
+                                                        setEditSetWeight(s.weight === 'BW' ? 'BW' : s.weight.toString());
+                                                        setEditSetReps(s.reps.toString());
+                                                        setEditSetNote(s.note || '');
+                                                     }} className="text-zinc-600 hover:text-blue-400"><IconEdit size={14}/></button>
+                                                     <button onClick={() => deleteSet(s.id)} className="text-zinc-600 hover:text-red-500"><IconTrash size={14}/></button>
+                                                  </div>
+                                               )}
+                                            </div>
+                                         )}
                                       </div>
                                    ))}
                                 </div>
@@ -1982,6 +2102,9 @@
       const [customExercises, setCustomExercises] = useState([]);
       const [gauntlet, setGauntlet] = useState(null);
       const [loading, setLoading] = useState(true);
+      
+      // State for calendar direct navigation
+      const [calendarDateToOpen, setCalendarDateToOpen] = useState(null);
 
       useEffect(() => {
         let isMounted = true;
@@ -2080,13 +2203,13 @@
             {activeTab === 'hub' && (
               <>
                 <Gauntlet gauntlet={gauntlet} localUser={localUser} appSettings={appSettings} />
-                <Feed workouts={workouts} habits={habits} posts={posts} localUser={localUser} appSettings={appSettings} />
+                <Feed workouts={workouts} habits={habits} posts={posts} localUser={localUser} appSettings={appSettings} setActiveTab={setActiveTab} setCalendarDateToOpen={setCalendarDateToOpen} />
               </>
             )}
             {activeTab === 'train' && <Train workouts={workouts} localUser={localUser} exerciseDB={exerciseDB} customExercises={customExercises} appSettings={appSettings} />}
-            {activeTab === 'diet' && <Diet habits={habits} localUser={localUser} />}
+            {activeTab === 'diet' && <Diet habits={habits} localUser={localUser} appSettings={appSettings} />}
             {activeTab === 'recipes' && <Recipes recipes={recipes} localUser={localUser} appSettings={appSettings} />}
-            {activeTab === 'history' && <History workouts={workouts} habits={habits} profiles={profiles} localUser={localUser} />}
+            {activeTab === 'history' && <History workouts={workouts} habits={habits} profiles={profiles} localUser={localUser} calendarDateToOpen={calendarDateToOpen} setCalendarDateToOpen={setCalendarDateToOpen} />}
             {activeTab === 'vs' && <Stats workouts={workouts} habits={habits} profiles={profiles} />}
             {activeTab === 'profile' && <Profile profiles={profiles} localUser={localUser} appSettings={appSettings} onLogout={() => { localStorage.removeItem('ts_user'); setLocalUser(null); }} />}
           </main>
