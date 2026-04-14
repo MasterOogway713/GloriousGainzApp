@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -68,55 +69,6 @@
     const firebaseApp = initializeApp(firebaseConfig);
     const auth = getAuth(firebaseApp);
     const db = getFirestore(firebaseApp);
-
-// ... (your existing imports)
-
-    // ==========================================
-    // 🛠️ FIREBASE SETUP & GLOBALS
-    // ==========================================
-    const defaultFirebaseConfig = {
-      apiKey: "AIzaSyBXshCysVDRwvAOCvvnaqYNbAYjtdl3Wz4",
-      authDomain: "gloriousgainzapp.firebaseapp.com",
-      projectId: "gloriousgainzapp",
-      storageBucket: "gloriousgainzapp.firebasestorage.app",
-      messagingSenderId: "620249838291",
-      appId: "1:620249838291:web:784bdc3e4ff188ebb21a26"
-    };
-
-    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : defaultFirebaseConfig;
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'gloriousgainzapp';
-    const envApiKey = typeof __gemini_api_key !== 'undefined' ? __gemini_api_key : "";
-    
-    const firebaseApp = initializeApp(firebaseConfig);
-    const auth = getAuth(firebaseApp);
-    const db = getFirestore(firebaseApp);
-
-    // ==========================================
-    // ANONYMOUS AUTHENTICATION BLOCK - PLACE THIS HERE
-    // ==========================================
-    useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
-            if (!user) {
-                // No user is signed in, so sign in anonymously
-                signInAnonymously(auth)
-                    .then(() => {
-                        console.log("Successfully signed in anonymously.");
-                    })
-                    .catch((error) => {
-                        console.error("Error signing in anonymously:", error.code, error.message);
-                        // You might want to display an error message to the user here
-                    });
-            } else {
-                // User is already signed in (could be anonymous or via another method)
-                console.log("User is already authenticated. UID:", user.uid);
-            }
-        });
-
-        // Cleanup the listener when the component unmounts
-        return () => unsubscribe();
-    }, []); // The empty array ensures this effect runs only once after the initial render
-
-
 
     const DB_URL = "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/dist/exercises.json";
     const IMG_BASE_URL = "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/";
@@ -2223,12 +2175,11 @@
           }
         };
 
+        // Important Fix: Execute Auth before we rely strictly on the listener
+        initAuth();
+
         const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-          if (user) {
-             if (isMounted) setAuthUser(user);
-          } else {
-             initAuth();
-          }
+          if (user && isMounted) setAuthUser(user);
         });
 
         fetch(DB_URL)
@@ -2317,3 +2268,5 @@
   </script>
 </body>
 </html>
+
+```
