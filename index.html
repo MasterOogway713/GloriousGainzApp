@@ -2133,7 +2133,7 @@
 
     // --- MAIN APP ---
     function App() {
-      const [authUser, setAuthUser] = useState(null);
+      const [user, setUser] = useState(null);
       const [localUser, setLocalUser] = useState(localStorage.getItem('ts_user') || null);
       const [activeTab, setActiveTab] = useState('hub');
       
@@ -2147,18 +2147,11 @@
       const [customExercises, setCustomExercises] = useState([]);
       const [gauntlet, setGauntlet] = useState(null);
       const [loading, setLoading] = useState(true);
-      
-      // State for calendar direct navigation
       const [calendarDateToOpen, setCalendarDateToOpen] = useState(null);
 
+      // 1. Auth Init - Guarantees we have permission before reading
       useEffect(() => {
         let isMounted = true;
-        
-        // Failsafe to guarantee the app opens after 3s even if DB/Auth is fully unreachable
-        const failsafe = setTimeout(() => {
-           if (isMounted) setLoading(false);
-        }, 3000);
-
         const initAuth = async () => {
           try {
             if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -2168,19 +2161,19 @@
             }
           } catch (error) {
             console.error("Auth error:", error);
-            // Fallback: If your Firebase project has Anonymous auth disabled, 
-            // this guarantees the app will still open and attempt to load public data!
-            if (isMounted) setAuthUser({ uid: 'fallback-unauthenticated' });
+            if (isMounted) setUser({ uid: 'fallback-unauthenticated' });
           }
         };
 
-        // Important Fix: Execute Auth before we rely strictly on the listener
         initAuth();
 
-        const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-          if (user && isMounted) setAuthUser(user);
+        const unsubscribe = onAuthStateChanged(auth, (u) => {
+          if (u && isMounted) {
+            setUser(u);
+          }
         });
 
+        // Load DB
         fetch(DB_URL)
           .then(res => res.json())
           .then(data => {
@@ -2190,55 +2183,51 @@
           })
           .catch(e => console.error("DB Fetch Error:", e));
 
-        return () => {
-           isMounted = false;
-           unsubscribeAuth();
-           clearTimeout(failsafe);
-        };
+        return () => { isMounted = false; unsubscribe(); };
       }, []);
 
+      // 2. Data Subscription - Guarded by the user object
       useEffect(() => {
-        if (!authUser) return; // Wait for Firebase Auth handshake OR fallback before querying DB
+        if (!user) return;
 
-        const wQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'workouts'));
-        const hQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'habits'));
-        const pQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'posts'));
-        const rQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'recipes'));
-        const profQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'profiles'));
-        const cQuery = query(collection(db, 'artifacts', appId, 'public', 'data', 'custom_exercises'));
-        const gDoc = doc(db, 'artifacts', appId, 'public', 'data', 'gauntlet', 'current');
-        const sDoc = doc(db, 'artifacts', appId, 'public', 'data', 'settings', 'app_settings');
-
-        const unsubW = onSnapshot(wQuery, s => setWorkouts(s.docs.map(d => ({id:d.id, ...d.data()}))), (err) => console.error(err));
-        const unsubH = onSnapshot(hQuery, s => setHabits(s.docs.map(d => ({id:d.id, ...d.data()}))), (err) => console.error(err));
-        const unsubP = onSnapshot(pQuery, s => setPosts(s.docs.map(d => ({id:d.id, ...d.data()}))), (err) => console.error(err));
-        const unsubR = onSnapshot(rQuery, s => setRecipes(s.docs.map(d => ({id:d.id, ...d.data()}))), (err) => console.error(err));
-        const unsubC = onSnapshot(cQuery, s => setCustomExercises(s.docs.map(d => ({id:d.id, ...d.data()}))), (err) => console.error(err));
+        const pathBase = ['artifacts', appId, 'public', 'data'];
         
-        // Profiles is our benchmark to know data is successfully flowing
-        const unsubProf = onSnapshot(profQuery, s => { 
+        const qWorkouts = query(collection(db, ...pathBase, 'workouts'));
+        const qHabits = query(collection(db, ...pathBase, 'habits'));
+        const qPosts = query(collection(db, ...pathBase, 'posts'));
+        const qRecipes = query(collection(db, ...pathBase, 'recipes'));
+        const qProfiles = query(collection(db, ...pathBase, 'profiles'));
+        const qCustomEx = query(collection(db, ...pathBase, 'custom_exercises'));
+        const dGauntlet = doc(db, ...pathBase, 'gauntlet', 'current');
+        const dSettings = doc(db, ...pathBase, 'settings', 'app_settings');
+
+        const unsubW = onSnapshot(qWorkouts, s => setWorkouts(s.docs.map(d => ({id:d.id, ...d.data()}))), e => console.error(e));
+        const unsubH = onSnapshot(qHabits, s => setHabits(s.docs.map(d => ({id:d.id, ...d.data()}))), e => console.error(e));
+        const unsubP = onSnapshot(qPosts, s => setPosts(s.docs.map(d => ({id:d.id, ...d.data()}))), e => console.error(e));
+        const unsubR = onSnapshot(qRecipes, s => setRecipes(s.docs.map(d => ({id:d.id, ...d.data()}))), e => console.error(e));
+        const unsubC = onSnapshot(qCustomEx, s => setCustomExercises(s.docs.map(d => ({id:d.id, ...d.data()}))), e => console.error(e));
+        
+        const unsubProf = onSnapshot(qProfiles, s => { 
           const p={}; s.docs.forEach(d => p[d.id]=d.data()); 
           setProfiles(p); 
-          setLoading(false); // Successfully loaded data, drop loading screen
+          setLoading(false); 
         }, (err) => { 
            console.error("DB connection error:", err); 
-           setLoading(false); // Drop loading screen even if it fails
+           setLoading(false); 
         });
 
-        const unsubG = onSnapshot(gDoc, (d) => {
-           if (d.exists()) setGauntlet(d.data());
-           else setGauntlet(null);
-        }, (err) => console.error(err));
-        
-        const unsubS = onSnapshot(sDoc, (d) => {
-           if (d.exists()) setAppSettings(d.data());
-        }, (err) => console.error(err));
+        const unsubG = onSnapshot(dGauntlet, d => setGauntlet(d.exists() ? d.data() : null), e => console.error(e));
+        const unsubS = onSnapshot(dSettings, d => setAppSettings(d.exists() ? d.data() : {}), e => console.error(e));
 
         return () => { unsubW(); unsubH(); unsubP(); unsubR(); unsubProf(); unsubC(); unsubG(); unsubS(); };
-      }, [authUser]);
+      }, [user]);
 
       if (!localUser) return <WelcomeScreen onSelect={(u) => { localStorage.setItem('ts_user', u); setLocalUser(u); }} />;
-      if (loading) return <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center gap-4 text-orange-500 font-black italic uppercase animate-pulse"><IconFlame size={64} className="animate-bounce" /> Loading Protocol...</div>;
+      if (loading) return (
+          <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center gap-4 text-orange-500 font-black italic uppercase animate-pulse">
+              <IconFlame size={64} className="animate-bounce" /> Loading Protocol...
+          </div>
+      );
 
       return (
         <div className="min-h-screen bg-zinc-950 text-slate-50 font-sans selection:bg-orange-500/30 overflow-x-hidden">
