@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Turkey Shred '26</title>
+  <title>Glorious Gainz App</title>
   
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -206,7 +206,7 @@
             <div className="bg-orange-500/10 p-4 rounded-full mb-6 border border-orange-500/20 backdrop-blur-md">
               <IconTrophy className="text-orange-500 w-12 h-12" />
             </div>
-            <h1 className="text-4xl font-black italic tracking-tighter mb-2 uppercase text-white leading-tight">Turkey Shred <span className="text-orange-500">'26</span></h1>
+            <h1 className="text-4xl font-black italic tracking-tighter mb-2 uppercase text-white leading-tight">Glorious Gainz<span className="text-orange-500">'26</span></h1>
             <p className="text-zinc-400 mb-12 font-medium">Who is grinding today?</p>
             <div className="flex gap-4 w-full max-w-sm">
               <button onClick={() => onSelect('Jordan')} className="flex-1 bg-zinc-900 border border-zinc-800 hover:border-blue-500 py-8 rounded-3xl font-black text-xl text-white transition-all active:scale-95 flex flex-col items-center gap-3 shadow-2xl">
@@ -248,7 +248,7 @@
         <>
           <div className="sticky top-0 z-50 bg-zinc-950/80 backdrop-blur-xl border-b border-zinc-800/50 px-4 py-3 flex justify-between items-center">
             <div>
-              <h1 className="text-xl font-black italic tracking-tighter uppercase">Turkey<span className="text-orange-500">Shred</span></h1>
+              <h1 className="text-xl font-black italic tracking-tighter uppercase">Glorious<span className="text-orange-500">Gainz</span></h1>
               <div className="text-[10px] font-black text-zinc-500 uppercase tracking-widest flex items-center gap-1.5">
                 <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></div> Live as {localUser}
               </div>
@@ -266,7 +266,7 @@
                 <button onClick={() => setShowModal(false)} className="absolute top-6 right-6 text-zinc-500 hover:text-white transition-colors z-10"><IconX size={24} /></button>
                 
                 <IconFlame size={56} className="text-orange-500 mx-auto mb-4 drop-shadow-[0_0_15px_rgba(249,115,22,0.8)]" />
-                <h2 className="text-4xl font-black italic uppercase text-white mb-1 tracking-tighter relative z-10">Turkey Shred</h2>
+                <h2 className="text-4xl font-black italic uppercase text-white mb-1 tracking-tighter relative z-10">Glorious Gainz</h2>
                 <p className="text-orange-500 font-black text-[10px] mb-8 uppercase tracking-[0.3em] relative z-10">The Clock is Ticking</p>
                 
                 <div className="grid grid-cols-4 gap-2 mb-10 relative z-10">
@@ -2044,7 +2044,7 @@
             const res = await fetch(`https://api.telegram.org/bot${telegramToken.trim()}/sendMessage`, {
                method: 'POST',
                headers: { 'Content-Type': 'application/json' },
-               body: JSON.stringify({ chat_id: telegramChatId.trim(), text: "🤖 Test message from Turkey Shred '26 App! Your bot is correctly linked." })
+               body: JSON.stringify({ chat_id: telegramChatId.trim(), text: "🤖 Test message from the Glorious Gainz App! Your bot is correctly linked." })
             });
             if (!res.ok) {
                const errData = await res.json().catch(() => ({}));
